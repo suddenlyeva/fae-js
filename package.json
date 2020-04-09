@@ -1,0 +1,19 @@
+{
+  "name": "fae",
+  "version": "1.0.0",
+  "description": "Fae Language",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/suddenly-eva/fae.git"
+  },
+  "author": "EvaRia",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/suddenly-eva/fae/issues"
+  },
+  "homepage": "https://github.com/suddenly-eva/fae#readme"
+}
