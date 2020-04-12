@@ -15,5 +15,9 @@
   "bugs": {
     "url": "https://github.com/suddenly-eva/fae/issues"
   },
-  "homepage": "https://github.com/suddenly-eva/fae#readme"
+  "homepage": "https://github.com/suddenly-eva/fae#readme",
+  "dependencies": {
+    "flatted": "^2.0.2",
+    "json-circular-stringify": "0.0.1"
+  }
 }
