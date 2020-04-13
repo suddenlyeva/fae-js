@@ -251,6 +251,17 @@ while (cur < src.length) {
     next()
   }
 
+  // Object Union
+  else if (src[cur] == ':') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : ':',
+      line : `${line}:${col}`
+    })
+    next()
+  }
+
   // Arrow
   else if (src[cur] == '-' && src[cur + 1] == '>') {
     token_list.push({
@@ -442,38 +453,29 @@ function ParseEnvironment({tokens,parent,args}) {
   }
 
   environment.scope = { parent, vars }
+  environment.statements = []
 
   //
-  // Parse Environment Stack
+  // Function Look-Ahead
   let t = 0
   while (t < tokens.length) {
-    // Variable Declarations
-    if (tokens[t].symbol == 'let') {
-      ++t
-      if (tokens[t].type != 'IDENTIFIER') {
-        throw ParserError(tokens[t], 'Expected a valid identifier')
-      }
-      if (environment.scope.vars[tokens[t].symbol]) {
-        throw ParserError(tokens[t], `Identifier "${tokens[t].symbol}" already exists`)
-      }
-      vars[tokens[t].symbol] = { type: 'UNDEFINED' }
-    }
     // Function and Task Declarations
-    else if (tokens[t].symbol == 'function' || tokens[t].symbol == 'task') {
+    if (tokens[t].symbol == 'function' || tokens[t].symbol == 'task') {
       let func_start = tokens[t]
       let type = tokens[t].symbol == 'function' ? 'FUNCTION' : 'TASK'
       ++t
       if (tokens[t].type != 'IDENTIFIER') {
         throw ParserError(tokens[t], 'Expected a valid identifier')
       }
-      if (environment.scope.vars[tokens[t].symbol]) {
-        throw ParserError(tokens[t], `Identifier "${tokens[t].symbol}" already exists`)
+      if (vars[tokens[t].symbol]) {
+        throw ParserError(tokens[t], `Identifier "${tokens[t].symbol}" already exists in scope`)
       }
       let id = tokens[t].symbol
       let func = {}
       func.type = type
       func.args = []
       ++t
+      // Arguments list
       if (tokens[t].symbol != '(') {
         throw ParserError(tokens[t], "Expected '('")
       }
@@ -492,6 +494,7 @@ function ParseEnvironment({tokens,parent,args}) {
         throw ParserError(tokens[t], "Expected ')'")
       }
       ++t
+      // Function/Task Body
       if (tokens[t].symbol != '{') {
         throw ParserError(tokens[t], `Expected the beginning of a ${type} body`)
       }
@@ -516,7 +519,81 @@ function ParseEnvironment({tokens,parent,args}) {
         parent: environment.scope, 
         args: func.args
       })
+      // func.value = { type: 'UNDEFINED' }
       vars[id] = func
+      let start_id = tokens.indexOf(func_start)
+      tokens.splice(start_id, t - start_id)
+      t = start_id
+    }
+    else {
+      ++t
+    }
+  }
+
+  //
+  // Parse Statements
+  t = 0
+  while (t < tokens.length) {
+    // Variable Declarations
+    if (tokens[t].symbol == 'let') {
+      ++t
+      if (tokens[t].type != 'IDENTIFIER') {
+        throw ParserError(tokens[t], 'Expected a valid identifier')
+      }
+      if (vars[tokens[t].symbol]) {
+        throw ParserError(tokens[t], `Identifier "${tokens[t].symbol}" already exists in scope`)
+      }
+      vars[tokens[t].symbol] = { type: 'UNDEFINED' }
+    }
+    // Single statements
+    else if (tokens[t].type == 'IDENTIFIER' || tokens[t].symbol == 'return') {
+      let statement_start = t
+      let assignment_index = null
+      let is_return = tokens[t].symbol == 'return'
+
+      // Look ahead for statement type and end
+      while (tokens[t].symbol != ';') {
+        if (!tokens[t]) {
+          throw ParserError(tokens[t], `Unexpected end of file. Are you missing a ';'?`)
+        }
+        if (tokens[t].type == 'ASSIGN') {
+          if (assignment_index !== null) {
+            throw ParserError(tokens[t], `Unexpected multiple assignments found in statement. Are you missing a ';'?`)
+          }
+          assignment_index = t
+        }
+        ++t
+      }
+
+      // Return Statements 
+      if (is_return) {
+        let statement = {
+          statement : 'RETURN',
+          expression : tokens.slice(statement_start + 1, t - statement_start)
+        }
+        environment.statements.push(statement)
+        ++t
+      }
+      // Assignment Statements
+      else if(assignment_index) {
+        let assignment = {
+          statement : 'ASSIGN',
+          variable : tokens.slice(statement_start, assignment_index),
+          operator : tokens[assignment_index].symbol,
+          expression : tokens.slice(assignment_index + 1, t)
+        }
+        environment.statements.push(assignment)
+        ++t
+      }
+      // Normal Expressions
+      else {
+        let expression = {
+          statement : 'EXPRESSION',
+          expression : tokens.slice(statement_start, t - statement_start)
+        }
+        environment.statements.push(expression)
+        ++t
+      }
     }
     else {
       ++t
@@ -527,9 +604,7 @@ function ParseEnvironment({tokens,parent,args}) {
 }
 
 try {
-  let AST = {
-   program : ParseEnvironment({ tokens: token_list })
-  }
+  let AST = ParseEnvironment({ tokens: token_list })
   console.log(JSON.stringify(AST, null, '  '))
 }
 catch (e) {
