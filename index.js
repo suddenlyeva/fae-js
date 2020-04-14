@@ -363,10 +363,17 @@ while (cur < src.length) {
   else if (src[cur] == '"') {
     let symbol = src[cur]
     let lineinfo = `${line}:${col}`
+    let escape = false
     next()
-    while(src[cur] != '"') {
+    while(src[cur] != '"' || escape) {
       if (!src[cur]) {
         throw Error(`At Line ${lineinfo} - End of string not found`)
+      }
+      if (src[cur] == '\\' && !escape) {
+        escape = true
+      }
+      else {
+        escape = false
       }
       symbol += src[cur]
       next()
@@ -632,6 +639,14 @@ function ParseTerm({tokens}) {
     let term = {
       type : '<Number>',
       value : Number(tokens[0].symbol)
+    }
+    tokens.shift()
+    return term
+  }
+  else if (tokens[0].type == 'STRING') {
+    let term = {
+      type : '<String>',
+      value : tokens[0].symbol.slice(1,-1)
     }
     tokens.shift()
     return term
