@@ -636,6 +636,16 @@ function ParseTerm({tokens}) {
     tokens.shift()
     return term
   }
+  else if (tokens[0].symbol == '(') {
+    let start_parentheses = tokens[0]
+    tokens.shift()
+    let term = ParseExpression({tokens})
+    if (tokens[0].symbol != ')') {
+      throw ParserError(start_parentheses, `No matching matching ')' found in expression term`)
+    }
+    tokens.shift()
+    return term
+  }
   else {
     return { type : '<Invalid>' }
   }
@@ -649,7 +659,7 @@ function ParseProduct({tokens}) {
     let op = {
       operation,
       left,
-      right : ParseTerm({tokens})
+      right : ParseProduct({tokens})
     }
     return op
   }
@@ -666,7 +676,7 @@ function ParseSum({tokens}) {
     let op = {
       operation,
       left,
-      right : ParseProduct({tokens})
+      right : ParseSum({tokens})
     }
     return op
   }
@@ -681,7 +691,7 @@ function ParseExpression({tokens}) {
 
 try {
   let AST = ParseEnvironment({ tokens: token_list })
-  console.log(JSON.stringify(AST, null, '  '))
+  console.log(JSON.stringify(AST, null, '   '))
 }
 catch (e) {
   console.error(e)
