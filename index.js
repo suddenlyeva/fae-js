@@ -358,6 +358,30 @@ while (cur < src.length) {
   }
 
   //
+  // String Literals
+
+  else if (src[cur] == '"') {
+    let symbol = src[cur]
+    let lineinfo = `${line}:${col}`
+    next()
+    while(src[cur] != '"') {
+      if (!src[cur]) {
+        throw Error(`At Line ${lineinfo} - End of string not found`)
+      }
+      symbol += src[cur]
+      next()
+    }
+    next()
+    symbol += src[cur]
+
+    token_list.push({
+      id : token_list.length,
+      type : 'STRING',
+      symbol,
+      line : lineinfo
+    })
+  }
+  //
   // Words
 
   else if (isLetter(src[cur]) || src[cur] == '@') {
@@ -448,7 +472,7 @@ function ParseEnvironment({tokens,parent,args}) {
 
   if (args) {
     for (let arg of args) {
-      vars[arg] = { type: 'UNDEFINED' }
+      vars[arg] = { type: '<Undefined>' }
     }
   }
 
@@ -543,7 +567,7 @@ function ParseEnvironment({tokens,parent,args}) {
       if (vars[tokens[t].symbol]) {
         throw ParserError(tokens[t], `Identifier "${tokens[t].symbol}" already exists in scope`)
       }
-      vars[tokens[t].symbol] = { type: 'UNDEFINED' }
+      vars[tokens[t].symbol] = { type: '<Undefined>' }
     }
     // Single statements
     else if (tokens[t].type == 'IDENTIFIER' || tokens[t].symbol == 'return') {
@@ -580,7 +604,7 @@ function ParseEnvironment({tokens,parent,args}) {
           statement : 'ASSIGN',
           variable : tokens.slice(statement_start, assignment_index),
           operator : tokens[assignment_index].symbol,
-          expression : tokens.slice(assignment_index + 1, t)
+          expression : ParseExpression({ tokens: tokens.slice(assignment_index + 1, t + 1) })
         }
         environment.statements.push(assignment)
         ++t
@@ -589,7 +613,7 @@ function ParseEnvironment({tokens,parent,args}) {
       else {
         let expression = {
           statement : 'EXPRESSION',
-          expression : tokens.slice(statement_start, t - statement_start)
+          expression : ParseExpression({ tokens: tokens.slice(statement_start, t - statement_start) })
         }
         environment.statements.push(expression)
         ++t
@@ -601,6 +625,58 @@ function ParseEnvironment({tokens,parent,args}) {
   }
 
   return environment
+}
+
+function ParseTerm({tokens}) {
+  if (tokens[0].type == 'NUMBER') {
+    let term = {
+      type : '<Number>',
+      value : Number(tokens[0].symbol)
+    }
+    tokens.shift()
+    return term
+  }
+  else {
+    return { type : '<Invalid>' }
+  }
+}
+
+function ParseProduct({tokens}) {
+  let left = ParseTerm({tokens})
+  if(tokens[0].symbol == '*' || tokens[0].symbol == '/') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      operation,
+      left,
+      right : ParseTerm({tokens})
+    }
+    return op
+  }
+  else {
+    return left
+  }
+}
+
+function ParseSum({tokens}) {
+  let left = ParseProduct({tokens})
+  if(tokens[0].symbol == '+' || tokens[0].symbol == '-') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      operation,
+      left,
+      right : ParseProduct({tokens})
+    }
+    return op
+  }
+  else {
+    return left
+  }
+}
+
+function ParseExpression({tokens}) {
+  return ParseSum({tokens})
 }
 
 try {
