@@ -829,6 +829,35 @@ function ParseTerm({tokens}) {
     }
     return term
   }
+  // Arrays
+  else if (tokens[0].symbol == '{') {
+    let obj = {}
+    while (tokens[0].symbol != '}') {
+      tokens.shift()
+      if (tokens[0].symbol == '}') {
+        break
+      }
+      if (tokens[0].type != 'IDENTIFIER') {
+        throw ParserError(tokens[0], `Not a valid name for object property`)
+      }
+      let key = tokens[0].symbol
+      tokens.shift()
+      if (tokens[0].symbol != ':') {
+        throw ParserError(tokens[0], `Expected ':'`)
+      }
+      tokens.shift()
+      obj[key] = ParseExpression({tokens})
+      if (tokens[0].symbol != '}' && tokens[0].symbol != ',' ) {
+        throw ParserError(tokens[0], `Invalid expression in object initializer. Are you missing a ','?`)
+      }
+    }
+    tokens.shift()
+    let term = {
+      type : '<Object>',
+      value : obj
+    }
+    return term
+  }
   // Nested Expressions
   else if (tokens[0].symbol == '(') {
     let start_parentheses = tokens[0]
@@ -968,8 +997,23 @@ function ParseLogicOr({tokens}) {
   return left
 }
 
+function ParseStringer({tokens}) {
+  let left = ParseLogicOr({tokens})
+  while(tokens[0].symbol == '~') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      operation,
+      left,
+      right : ParseLogicOr({tokens})
+    }
+    left = op
+  }
+  return left
+}
+
 function ParseExpression({tokens}) {
-  return ParseLogicOr({tokens})
+  return ParseStringer({tokens})
 }
 
 try {
