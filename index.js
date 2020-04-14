@@ -809,13 +809,33 @@ function ParseTerm({tokens}) {
     tokens.shift()
     return term
   }
+  // Arrays
+  else if (tokens[0].symbol == '[') {
+    let array = []
+    while (tokens[0].symbol != ']') {
+      tokens.shift()
+      array.push(ParseExpression({tokens}))
+      if (tokens[0].symbol == ';') {
+        throw ParserError(tokens[0], `No matching ']' found in array initializer`)
+      }
+      if (tokens[0].symbol != ']' && tokens[0].symbol != ',' ) {
+        throw ParserError(tokens[0], `Invalid expression in array initializer. Are you missing a ','?`)
+      }
+    }
+    tokens.shift()
+    let term = {
+      type : '<Array>',
+      value : array
+    }
+    return term
+  }
   // Nested Expressions
   else if (tokens[0].symbol == '(') {
     let start_parentheses = tokens[0]
     tokens.shift()
     let term = ParseExpression({tokens})
     if (tokens[0].symbol != ')') {
-      throw ParserError(start_parentheses, `No matching matching ')' found in expression term`)
+      throw ParserError(start_parentheses, `No matching ')' found in expression term`)
     }
     tokens.shift()
     return term
