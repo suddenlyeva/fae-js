@@ -152,6 +152,115 @@ while (cur < src.length) {
   }
 
   //
+  // Logic
+
+  // Less Equals
+  else if (src[cur] == '<' && src[cur + 1] == '=') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '<=',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
+  // Greater Equals
+  else if (src[cur] == '>' && src[cur + 1] == '=') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '>=',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
+  // Less
+  else if (src[cur] == '<') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '<',
+      line : `${line}:${col}`
+    })
+    next()
+  }
+
+  // Greater
+  else if (src[cur] == '>') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '>',
+      line : `${line}:${col}`
+    })
+    next()
+  }
+
+  // Equality
+  else if (src[cur] == '=' && src[cur + 1] == '=') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '==',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
+  // Inequality
+  else if (src[cur] == '=' && src[cur + 1] == '=') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '==',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
+  // Logical AND
+  else if (src[cur] == '&' && src[cur + 1] == '&') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '&&',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
+  // Logical OR
+  else if (src[cur] == '|' && src[cur + 1] == '|') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '||',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
+  // Logical NOT
+  else if (src[cur] == '!') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '!',
+      line : `${line}:${col}`
+    })
+    next()
+  }
+
+
+  //
   // Assignments
 
   // Plus Equals
@@ -196,6 +305,30 @@ while (cur < src.length) {
       id : token_list.length,
       type : 'ASSIGN',
       symbol : '/=',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
+  // Remainder Equals
+  else if (src[cur] == '%' && src[cur + 1] == '=') {
+    token_list.push({
+      id : token_list.length,
+      type : 'ASSIGN',
+      symbol : '%=',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
+  // Power Equals
+  else if (src[cur] == '^' && src[cur + 1] == '=') {
+    token_list.push({
+      id : token_list.length,
+      type : 'ASSIGN',
+      symbol : '^=',
       line : `${line}:${col}`
     })
     next()
@@ -251,7 +384,7 @@ while (cur < src.length) {
     next()
   }
 
-  // Object Union
+  // Object Assignment
   else if (src[cur] == ':') {
     token_list.push({
       id : token_list.length,
@@ -317,6 +450,29 @@ while (cur < src.length) {
     })
     next()
   }
+
+  // Remainder
+  else if (src[cur] == '%') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '%',
+      line : `${line}:${col}`
+    })
+    next()
+  }
+
+  // Power
+  else if (src[cur] == '^') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '^',
+      line : `${line}:${col}`
+    })
+    next()
+  }
+
 
   // String
   else if (src[cur] == '~') {
@@ -635,6 +791,7 @@ function ParseEnvironment({tokens,parent,args}) {
 }
 
 function ParseTerm({tokens}) {
+  // Numbers
   if (tokens[0].type == 'NUMBER') {
     let term = {
       type : '<Number>',
@@ -643,6 +800,7 @@ function ParseTerm({tokens}) {
     tokens.shift()
     return term
   }
+  // Strings
   else if (tokens[0].type == 'STRING') {
     let term = {
       type : '<String>',
@@ -651,6 +809,7 @@ function ParseTerm({tokens}) {
     tokens.shift()
     return term
   }
+  // Nested Expressions
   else if (tokens[0].symbol == '(') {
     let start_parentheses = tokens[0]
     tokens.shift()
@@ -661,14 +820,62 @@ function ParseTerm({tokens}) {
     tokens.shift()
     return term
   }
+  // Just in case
   else {
     return { type : '<Invalid>' }
   }
 }
 
+function ParsePrefix({tokens}) {
+  if(tokens[0].symbol == '-' || tokens[0].symbol == '!' || tokens[0].symbol == '|') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      operation,
+      right : ParsePrefix({tokens})
+    }
+    return op
+  }
+  else {
+    return ParseTerm({tokens})
+  }
+}
+
+function ParsePower({tokens}) {
+  let left = ParsePrefix({tokens})
+  if(tokens[0].symbol == '^') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      operation,
+      left,
+      right : ParsePower({tokens})
+    }
+    return op
+  }
+  else {
+    return left
+  }
+}
+
 function ParseProduct({tokens}) {
-  let left = ParseTerm({tokens})
-  if(tokens[0].symbol == '*' || tokens[0].symbol == '/') {
+  let left = ParsePower({tokens})
+  while(tokens[0].symbol == '*' || tokens[0].symbol == '/' || tokens[0].symbol == '%') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      operation,
+      left,
+      right : ParsePower({tokens})
+    }
+    left = op
+  }
+  return left
+}
+
+function ParseSum({tokens}) {
+  let left = ParseProduct({tokens})
+  while(tokens[0].symbol == '+' || tokens[0].symbol == '-') {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
@@ -676,16 +883,14 @@ function ParseProduct({tokens}) {
       left,
       right : ParseProduct({tokens})
     }
-    return op
+    left = op
   }
-  else {
-    return left
-  }
+  return left
 }
 
-function ParseSum({tokens}) {
-  let left = ParseProduct({tokens})
-  if(tokens[0].symbol == '+' || tokens[0].symbol == '-') {
+function ParseComparison({tokens}) {
+  let left = ParseSum({tokens})
+  while(tokens[0].symbol == '<' || tokens[0].symbol == '>' || tokens[0].symbol == '<=' || tokens[0].symbol == '>=') {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
@@ -693,15 +898,58 @@ function ParseSum({tokens}) {
       left,
       right : ParseSum({tokens})
     }
-    return op
+    left = op
   }
-  else {
-    return left
+  return left
+}
+
+function ParseEquality({tokens}) {
+  let left = ParseComparison({tokens})
+  while(tokens[0].symbol == '==' || tokens[0].symbol == '!=') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      operation,
+      left,
+      right : ParseComparison({tokens})
+    }
+    left = op
   }
+  return left
+}
+
+function ParseLogicAnd({tokens}) {
+  let left = ParseEquality({tokens})
+  while(tokens[0].symbol == '&&') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      operation,
+      left,
+      right : ParseEquality({tokens})
+    }
+    left = op
+  }
+  return left
+}
+
+function ParseLogicOr({tokens}) {
+  let left = ParseLogicAnd({tokens})
+  while(tokens[0].symbol == '||') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      operation,
+      left,
+      right : ParseLogicAnd({tokens})
+    }
+    left = op
+  }
+  return left
 }
 
 function ParseExpression({tokens}) {
-  return ParseSum({tokens})
+  return ParseLogicOr({tokens})
 }
 
 try {
