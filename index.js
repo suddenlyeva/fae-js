@@ -619,16 +619,6 @@ function ParserError(token, message) {
   return `ParserError at Line ${token.line} - ${message}`
 }
 
-function GetVariable(scope, id) {
-  while(scope) {
-    if (scope.vars[id]) {
-      return scope.vars[id]
-    }
-    scope = scope.parent
-  }
-  return null
-}
-
 function ParseEnvironment({tokens,parent,args}) {
 
   let environment = {}
@@ -758,7 +748,7 @@ function ParseEnvironment({tokens,parent,args}) {
       if (is_return) {
         let statement = {
           statement : 'RETURN',
-          expression : tokens.slice(statement_start + 1, t - statement_start)
+          expression : ParseExpression({ tokens: tokens.slice(statement_start + 1, t - statement_start) })
         }
         environment.statements.push(statement)
         ++t
@@ -767,7 +757,7 @@ function ParseEnvironment({tokens,parent,args}) {
       else if(assignment_index) {
         let assignment = {
           statement : 'ASSIGN',
-          variable : tokens.slice(statement_start, assignment_index),
+          variable : ParseExpression({ tokens: tokens.slice(statement_start, assignment_index + 1) }),
           operator : tokens[assignment_index].symbol,
           expression : ParseExpression({ tokens: tokens.slice(assignment_index + 1, t + 1) })
         }
@@ -803,7 +793,7 @@ function ParseTerm({tokens}) {
     return term
   }
   // Booleans
-  if (tokens[0].symbol == 'true' || tokens[0].symbol == 'false') {
+  else if (tokens[0].symbol == 'true' || tokens[0].symbol == 'false') {
     let term = {
       type : '<Boolean>',
       value : tokens[0].symbol == 'true' ? true : false
@@ -816,6 +806,14 @@ function ParseTerm({tokens}) {
     let term = {
       type : '<String>',
       value : tokens[0].symbol.slice(1,-1)
+    }
+    tokens.shift()
+    return term
+  }
+  // Identifiers
+  else if (tokens[0].type == 'IDENTIFIER') {
+    let term = {
+      variable : tokens[0].symbol
     }
     tokens.shift()
     return term
@@ -886,6 +884,74 @@ function ParseTerm({tokens}) {
   }
 }
 
+function ParseSuffix({tokens}) {
+  let left = ParseTerm({tokens})
+  while(tokens[0].symbol == '.' || tokens[0].symbol == '(' || tokens[0].symbol == '[') {
+    let operation = tokens[0].symbol
+
+    // Dot Access
+    if (operation == '.') {
+      tokens.shift()
+      if (tokens[0].type != 'IDENTIFIER') {
+        throw ParserError(tokens[0], `Object access expected a valid identifier`)
+      }
+      let op = {
+        left,
+        operation,
+        key : {
+          type : '<String>',
+          value : tokens[0].symbol
+        }
+      }
+      left = op
+      tokens.shift()
+    }
+    // Arraylike Access
+    else if (operation == '[') {
+      operation = '[]'
+      tokens.shift()
+      let op = {
+        left,
+        operation,
+        key : ParseExpression({tokens})
+      }
+      left = op
+      if (tokens[0].symbol != ']') {
+        throw ParserError(tokens[0], `Arraylike access expected a valid expression. Are you missing a ']'?`)
+      }
+      tokens.shift()
+    }
+    // Function Call
+    else if (operation == '(') {
+      operation = '()'
+      tokens.shift()
+      let args = []
+
+      while (tokens[0].symbol != ')') {
+        args.push(ParseExpression({tokens}))
+        if (tokens[0].symbol == ',') {
+          tokens.shift()
+        }
+        else if (tokens[0].symbol == ')') {
+          tokens.shift()
+          break;
+        }
+        else {
+          throw ParserError(tokens[0], `Function call expected a valid expression. Are you missing a ')' or ','?`)
+        }
+      }
+
+      let op = {
+        left,
+        operation,
+        args
+      }
+      left = op
+    }
+  }
+  return left
+}
+
 function ParsePrefix({tokens}) {
   if(tokens[0].symbol == '-' || tokens[0].symbol == '!' || tokens[0].symbol == '|') {
     let operation = tokens[0].symbol
@@ -897,7 +963,7 @@ function ParsePrefix({tokens}) {
     return op
   }
   else {
-    return ParseTerm({tokens})
+    return ParseSuffix({tokens})
   }
 }
 
@@ -907,8 +973,8 @@ function ParsePower({tokens}) {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
-      operation,
       left,
+      operation,
       right : ParsePower({tokens})
     }
     return op
@@ -924,8 +990,8 @@ function ParseProduct({tokens}) {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
-      operation,
       left,
+      operation,
       right : ParsePower({tokens})
     }
     left = op
@@ -939,8 +1005,8 @@ function ParseSum({tokens}) {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
-      operation,
       left,
+      operation,
       right : ParseProduct({tokens})
     }
     left = op
@@ -954,8 +1020,8 @@ function ParseComparison({tokens}) {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
-      operation,
       left,
+      operation,
       right : ParseSum({tokens})
     }
     left = op
@@ -969,8 +1035,8 @@ function ParseEquality({tokens}) {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
-      operation,
       left,
+      operation,
       right : ParseComparison({tokens})
     }
     left = op
@@ -984,8 +1050,8 @@ function ParseLogicAnd({tokens}) {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
-      operation,
       left,
+      operation,
       right : ParseEquality({tokens})
     }
     left = op
@@ -999,8 +1065,8 @@ function ParseLogicOr({tokens}) {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
-      operation,
       left,
+      operation,
       right : ParseLogicAnd({tokens})
     }
     left = op
@@ -1014,8 +1080,8 @@ function ParseStringer({tokens}) {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
-      operation,
       left,
+      operation,
       right : ParseLogicOr({tokens})
     }
     left = op
