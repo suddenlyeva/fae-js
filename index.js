@@ -807,6 +807,7 @@ function ParseEnvironment({tokens,parent,args}) {
       let loop = { statement: 'LOOP' }
 
       if (tokens[0].symbol == '('){
+        loop.statement = 'NLOOP'
         tokens.shift()
         loop.times = ParseExpression({tokens})
         if (tokens[0].symbol != ')') {
