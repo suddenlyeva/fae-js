@@ -744,7 +744,7 @@ function ParseEnvironment({tokens,parent,args}) {
       ++t
       // Function/Task Body
       if (tokens[t].symbol != '{') {
-        throw ParserError(tokens[t], `Expected the beginning of a ${type} body`)
+        throw ParserError(tokens[t], `Expected '{' to begin the ${type} body`)
       }
       ++t
       let block_start = t
@@ -792,6 +792,111 @@ function ParseEnvironment({tokens,parent,args}) {
         throw ParserError(tokens[t], `Identifier "${tokens[t].symbol}" already exists in scope`)
       }
       vars[tokens[t].symbol] = { type: '<Undefined>' }
+    }
+    // Loop
+    else if (tokens[t].symbol == 'loop') {
+      let loop_start = tokens[t]
+      ++t
+      let loop = { statement: 'LOOP' }
+      if (tokens[t].symbol == '('){
+        ++t
+        let arg_start = t
+        let depth = 1
+        while (depth > 0) {
+          if (!tokens[t]) {
+            throw ParserError(tokens[arg_start], `Expected ')' at the end of loop arguments`)
+          }
+          if (tokens[t].symbol == '(') {
+            ++depth
+          }
+          if (tokens[t].symbol == ')') {
+            --depth
+          }
+          ++t
+        }
+        let arg_tokens = tokens.slice(arg_start, t)
+        loop.times = ParseExpression({tokens : arg_tokens})
+      }
+
+      // Loop body
+      if (tokens[t].symbol != '{') {
+        throw ParserError(tokens[t], `Expected '{' to begin the loop body`)
+      }
+      ++t
+      let block_start = t
+      let depth = 1
+      while (depth > 0) {
+        if (!tokens[t]) {
+          throw ParserError(loop_start, `Expected '}' at the end of the loop body`)
+        }
+        if (tokens[t].symbol == '{') {
+          ++depth
+        }
+        if (tokens[t].symbol == '}') {
+          --depth
+        }
+        ++t
+      }
+      let loop_tokens = tokens.slice(block_start, t)
+      loop.body = ParseEnvironment({
+        tokens: loop_tokens, 
+        parent: environment.scope
+      })
+      environment.statements.push(loop)
+    }
+    // While
+    else if (tokens[t].symbol == 'while') {
+      let loop_start = tokens[t]
+      ++t
+      let loop = { statement: 'WHILE' }
+      if (tokens[t].symbol == '('){
+        ++t
+        let arg_start = t
+        let depth = 1
+        while (depth > 0) {
+          if (!tokens[t]) {
+            throw ParserError(tokens[arg_start], `Expected ')' at the end of loop arguments`)
+          }
+          if (tokens[t].symbol == '(') {
+            ++depth
+          }
+          if (tokens[t].symbol == ')') {
+            --depth
+          }
+          ++t
+        }
+        let arg_tokens = tokens.slice(arg_start, t)
+        loop.condition = ParseExpression({tokens : arg_tokens})
+      }
+      else {
+        throw ParserError(tokens[t], `Expected '(' to start while loop condition`)
+      }
+
+      // Loop body
+      if (tokens[t].symbol != '{') {
+        throw ParserError(tokens[t], `Expected '{' to begin the loop body`)
+      }
+      ++t
+      let block_start = t
+      let depth = 1
+      while (depth > 0) {
+        if (!tokens[t]) {
+          throw ParserError(loop_start, `Expected '}' at the end of the loop body`)
+        }
+        if (tokens[t].symbol == '{') {
+          ++depth
+        }
+        if (tokens[t].symbol == '}') {
+          --depth
+        }
+        ++t
+      }
+      let loop_tokens = tokens.slice(block_start, t)
+      loop.body = ParseEnvironment({
+        tokens: loop_tokens, 
+        parent: environment.scope
+      })
+      environment.statements.push(loop)
     }
     // Single statements
     else if (tokens[t].type == 'IDENTIFIER' || tokens[t].symbol == 'return') {
