@@ -347,6 +347,42 @@ while (cur < src.length) {
     next()
   }
 
+  // Union Equals
+  else if (src[cur] == ':' && src[cur + 1] == '=') {
+    token_list.push({
+      id : token_list.length,
+      type : 'ASSIGN',
+      symbol : ':=',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
+  // Exists Equals
+  else if (src[cur] == '?' && src[cur + 1] == '=') {
+    token_list.push({
+      id : token_list.length,
+      type : 'ASSIGN',
+      symbol : '?=',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
+  // Null Equals
+  else if (src[cur] == '\\' && src[cur + 1] == '=') {
+    token_list.push({
+      id : token_list.length,
+      type : 'ASSIGN',
+      symbol : '\\\\=',
+      line : `${line}:${col}`
+    })
+    next()
+    next()
+  }
+
   // Equals
   else if (src[cur] == '=') {
     token_list.push({
@@ -395,6 +431,39 @@ while (cur < src.length) {
     next()
   }
 
+  // Type Check
+  else if (src[cur] == '&') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '&',
+      line : `${line}:${col}`
+    })
+    next()
+  }
+
+  // Optional Switch
+  else if (src[cur] == '?') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '?',
+      line : `${line}:${col}`
+    })
+    next()
+  }
+
+  // Default
+  else if (src[cur] == '\\') {
+    token_list.push({
+      id : token_list.length,
+      type : 'OPERATOR',
+      symbol : '\\',
+      line : `${line}:${col}`
+    })
+    next()
+  }
+  
   // Arrow
   else if (src[cur] == '-' && src[cur + 1] == '>') {
     token_list.push({
@@ -732,9 +801,6 @@ function ParseEnvironment({tokens,parent,args}) {
 
       // Look ahead for statement type and end
       while (tokens[t].symbol != ';') {
-        if (!tokens[t]) {
-          throw ParserError(tokens[t], `Unexpected end of file. Are you missing a ';'?`)
-        }
         if (tokens[t].type == 'ASSIGN') {
           if (assignment_index !== null) {
             throw ParserError(tokens[t], `Unexpected multiple assignments found in statement. Are you missing a ';'?`)
@@ -742,6 +808,9 @@ function ParseEnvironment({tokens,parent,args}) {
           assignment_index = t
         }
         ++t
+        if (!tokens[t]) {
+          throw ParserError(tokens[statement_start], `Unexpected end of file in statement. Are you missing a ';'?`)
+        }
       }
 
       // Return Statements 
@@ -1014,15 +1083,60 @@ function ParseSum({tokens}) {
   return left
 }
 
-function ParseComparison({tokens}) {
+function ParseUnion({tokens}) {
   let left = ParseSum({tokens})
-  while(tokens[0].symbol == '<' || tokens[0].symbol == '>' || tokens[0].symbol == '<=' || tokens[0].symbol == '>=') {
+  while(tokens[0].symbol == ':') {
     let operation = tokens[0].symbol
     tokens.shift()
     let op = {
       left,
       operation,
       right : ParseSum({tokens})
+    }
+    left = op
+  }
+  return left
+}
+
+function ParseTypeOf({tokens}) {
+  let left = ParseUnion({tokens})
+  while(tokens[0].symbol == '&') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      left,
+      operation,
+      right : ParseUnion({tokens})
+    }
+    left = op
+  }
+  return left
+}
+
+function ParseRange({tokens}) {
+  let left = ParseTypeOf({tokens})
+  while(tokens[0].symbol == '..') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      left,
+      operation,
+      right : ParseTypeOf({tokens})
+    }
+    left = op
+  }
+  return left
+}
+
+function ParseComparison({tokens}) {
+  let left = ParseRange({tokens})
+  while(tokens[0].symbol == '<' || tokens[0].symbol == '>' || tokens[0].symbol == '<=' || tokens[0].symbol == '>=') {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      left,
+      operation,
+      right : ParseRange({tokens})
     }
     left = op
   }
@@ -1089,8 +1203,23 @@ function ParseStringer({tokens}) {
   return left
 }
 
+function ParseConditionals({tokens}) {
+  let left = ParseStringer({tokens})
+  while(tokens[0].symbol == '?' || tokens[0].symbol == '\\' ) {
+    let operation = tokens[0].symbol
+    tokens.shift()
+    let op = {
+      left,
+      operation,
+      right : ParseStringer({tokens})
+    }
+    left = op
+  }
+  return left
+}
+
 function ParseExpression({tokens}) {
-  return ParseStringer({tokens})
+  return ParseConditionals({tokens})
 }
 
 try {
