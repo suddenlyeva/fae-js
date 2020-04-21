@@ -570,6 +570,8 @@ while (cur < src.length) {
       'type',
       'while',
       'yield',
+      'true',
+      'false',
     ]
 
     if(keywords.includes(symbol)) {
@@ -800,6 +802,15 @@ function ParseTerm({tokens}) {
     tokens.shift()
     return term
   }
+  // Booleans
+  if (tokens[0].symbol == 'true' || tokens[0].symbol == 'false') {
+    let term = {
+      type : '<Boolean>',
+      value : tokens[0].symbol == 'true' ? true : false
+    }
+    tokens.shift()
+    return term
+  }
   // Strings
   else if (tokens[0].type == 'STRING') {
     let term = {
@@ -829,7 +840,7 @@ function ParseTerm({tokens}) {
     }
     return term
   }
-  // Arrays
+  // Objects
   else if (tokens[0].symbol == '{') {
     let obj = {}
     while (tokens[0].symbol != '}') {
