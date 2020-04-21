@@ -564,7 +564,7 @@ while (cur < src.length) {
       symbol += src[cur]
       next()
     }
-    if (src[cur] == '.') {
+    if (src[cur] == '.' && /\d/.test(src[cur+1])) {
       symbol += src[cur]
       next()
       while (/\d/.test(src[cur])) {
