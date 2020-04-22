@@ -1340,13 +1340,106 @@ function ParseBlock({tokens,parent,args}) {
   return env
 }
 
+let AST
 try {
-  let AST = ParseEnvironment({ tokens: token_list })
+  AST = ParseEnvironment({ tokens: token_list })
   if (token_list[0].type != 'EOF') {
     throw ParserError(token_list[0], `Invalid statement`)
   }
-  console.log(JSON.stringify(AST, null, '   '))
 }
 catch (e) {
   console.error(e)
 }
+
+/////////////////////////////
+//  I N T E R P R E T E R  //
+/////////////////////////////
+
+let stack = [AST]
+let env = AST
+
+function search(variable) {
+  let scope = env.scope
+  while (scope != null) {
+    if (env.scope.vars[variable]) {
+      return env.scope.vars[variable]
+    }
+    else {
+      scope = scope.parent
+    }
+  }
+  throw `"${variable}" is undefined`
+}
+
+function interpret(stack) {
+  let top = stack[stack.length - 1]
+
+  // Advance to next statement
+  if (top.statements != null) {
+    if (top.at == null) {
+      top.at = 0
+    }
+    else {
+      ++top.at
+    }
+    if (top.statements[top.at]) {
+      stack.push(top.statements[top.at])
+    }
+    else {
+      stack.pop()
+    }
+  }
+
+  // Expressions
+  else if (top.statement == 'EXPRESSION') {
+    stack.pop()
+    stack.push(top.expression)
+  }
+  // Traverse Left
+  else if (top.left && top.left.operation) {
+    stack.push(top.left)
+  }
+  // Traverse Right
+  else if (top.right && top.right.operation) {
+    stack.push(top.right)
+  }
+  // Leftside Variables
+  else if (top.left && top.left.variable) {
+    top.left = search(top.left.variable)
+  }
+  // Rightside Variables
+  else if (top.right && top.right.variable) {
+    top.right = search(top.right.variable)
+  }
+
+  //
+  // Operations
+
+  // Assign
+  else if (top.operation == '=') {
+    top.left.type = top.right.type
+    top.left.value = top.right.value
+    stack.pop()
+  }
+
+  // Addition
+  else if (top.operation == '+') {
+    top.type  = '<Number>'
+    top.value = top.left.value + top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+}
+
+const readline = require('readline')
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+})
+
+rl.on('line', (input) => {
+  interpret(stack)
+  console.log(stack)
+})
