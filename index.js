@@ -867,6 +867,38 @@ function ParseEnvironment({tokens,parent,args}) {
       environment.statements.push(statement)
     }
 
+    // For
+    else if (tokens[0].symbol == 'for') {
+      let statement = { statement: 'FOR' }
+      tokens.shift()
+
+      if (tokens[0].symbol != '(') {
+        throw ParserError(tokens[0], `Expected '(' at the start of for loop arguments`)
+      }
+      tokens.shift()
+
+      if (tokens[0].type != 'IDENTIFIER') {
+        throw ParserError(tokens[0], `Expected valid identifier for loop iterator`)
+      }
+      statement.variable = tokens[0].symbol
+      tokens.shift()
+
+      if (tokens[0].symbol != 'in') {
+        throw ParserError(tokens[arg_start], `Expected keyword 'in'`)
+      }
+      tokens.shift()
+  
+      statement.in = ParseExpression({tokens})
+
+      if (tokens[0].symbol != ')') {
+        throw ParserError(tokens[arg_start], `Expected ')' at the end of for loop arguments`)
+      }
+      tokens.shift()
+
+      statement.body = ParseBlock({ tokens, parent: environment.scope, args: [statement.variable] })
+      environment.statements.push(statement)
+    }
+
     // Single Statements
     else if (tokens[0].type == 'IDENTIFIER') {
       let statement = ParseStatement({tokens})
