@@ -810,7 +810,7 @@ function ParseEnvironment({tokens,parent,args}) {
       let loop = { statement: 'LOOP' }
 
       if (tokens[0].symbol == '('){
-        loop.statement = 'LOOP_N'
+        loop.statement = 'NLOOP'
         tokens.shift()
         loop.times = ParseExpression({tokens})
         if (tokens[0].symbol != ')') {
@@ -1454,9 +1454,26 @@ function interpret(stack) {
     }
   }
 
-  // Expressions
+  // Loop
   else if (top.statement == 'LOOP') {
     stack.push_environment(top.body)
+  }
+
+  // N Loop
+  else if (top.statement == 'NLOOP') {
+    if (!top.times.hasOwnProperty('value')) {
+      stack.push(top.times)
+    }
+    else if (top.remaining == null) {
+      top.remaining = Math.round(top.times.value)
+    }
+    else if (top.remaining) {
+      stack.push_environment(top.body)
+      --top.remaining
+    }
+    else {
+      stack.pop()
+    }
   }
 
   // Expressions
