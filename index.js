@@ -985,6 +985,7 @@ function ParseTerm({tokens}) {
     }
     tokens.shift()
     let term = {
+      init : '[]',
       type : '<Array>',
       value : array
     }
@@ -1014,6 +1015,7 @@ function ParseTerm({tokens}) {
     }
     tokens.shift()
     let term = {
+      init : '{}',
       type : '<Object>',
       value : obj
     }
@@ -1431,7 +1433,7 @@ function interpret(stack) {
     stack.push(top.expression)
   }
   // Traverse Left
-  else if (top.left && top.left.operation) {
+  else if (top.left && (top.left.operation || top.left.init)) {
     stack.push(top.left)
   }
   // Leftside Variables
@@ -1442,7 +1444,10 @@ function interpret(stack) {
   // Truth Gate
   else if (top.operation == '?' && !top.left.value) {
     top.type = '<Empty>'
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1450,12 +1455,15 @@ function interpret(stack) {
   else if (top.operation == '\\' && !!top.left.value) {
     top.type = top.left.type
     top.value = top.left.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
   // Traverse Right
-  else if (top.right && top.right.operation) {
+  else if (top.right && (top.right.operation || top.right.init)) {
     stack.push(top.right)
   }
   // Rightside Variables
@@ -1463,17 +1471,42 @@ function interpret(stack) {
     top.right = search(top.right.variable)
   }
 
+  // Traverse Arrays
+  else if (top.init == '[]') {
+    if (top.at == null) {
+      top.at = 0
+    }
+    if (top.at < top.value.length) {
+      let item = top.value[top.at]
+      if (item.operation || item.init) {
+        stack.push(item)
+      }
+      top.at++
+    }
+    else {
+      delete top.init
+      delete top.at
+      stack.pop()
+    }
+  }
+
   // Passed Gates
   else if (top.operation == '\\' || top.operation == '?') {
     top.type = top.right.type
     top.value = top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
   // Skip Empty Assignments
   else if (top.right.type == '<Empty>') {
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1486,7 +1519,10 @@ function interpret(stack) {
   else if (top.operation == '-' && !top.left) {
     top.type  = '<Number>'
     top.value = -top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1494,7 +1530,10 @@ function interpret(stack) {
   else if (top.operation == '!') {
     top.type  = '<Boolean>'
     top.value = !top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1502,7 +1541,10 @@ function interpret(stack) {
   else if (top.operation == '|') {
     top.type  = '<Number>'
     top.value = Math.abs(top.right.value)
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1510,7 +1552,10 @@ function interpret(stack) {
   else if (top.operation == '^') {
     top.type  = '<Number>'
     top.value = Math.pow(top.left.value, top.right.value)
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1518,7 +1563,10 @@ function interpret(stack) {
   else if (top.operation == '*') {
     top.type  = '<Number>'
     top.value = top.left.value * top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1526,7 +1574,10 @@ function interpret(stack) {
   else if (top.operation == '/') {
     top.type  = '<Number>'
     top.value = top.left.value / top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1534,7 +1585,10 @@ function interpret(stack) {
   else if (top.operation == '%') {
     top.type  = '<Number>'
     top.value = top.left.value % top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1542,7 +1596,10 @@ function interpret(stack) {
   else if (top.operation == '+') {
     top.type  = '<Number>'
     top.value = top.left.value + top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1550,7 +1607,10 @@ function interpret(stack) {
   else if (top.operation == '-') {
     top.type  = '<Number>'
     top.value = top.left.value - top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1566,7 +1626,10 @@ function interpret(stack) {
     for(let key in right) {
       top.value[key] = right[key]
     }
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1592,7 +1655,10 @@ function interpret(stack) {
         })
       }
     }
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1600,7 +1666,10 @@ function interpret(stack) {
   else if (top.operation == '<') {
     top.type  = '<Boolean>'
     top.value = top.left.value < top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1608,7 +1677,10 @@ function interpret(stack) {
   else if (top.operation == '>') {
     top.type  = '<Boolean>'
     top.value = top.left.value > top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1616,7 +1688,10 @@ function interpret(stack) {
   else if (top.operation == '<=') {
     top.type  = '<Boolean>'
     top.value = top.left.value <= top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1624,7 +1699,10 @@ function interpret(stack) {
   else if (top.operation == '>=') {
     top.type  = '<Boolean>'
     top.value = top.left.value >= top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1632,7 +1710,10 @@ function interpret(stack) {
   else if (top.operation == '==') {
     top.type  = '<Boolean>'
     top.value = top.left.value == top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1640,7 +1721,10 @@ function interpret(stack) {
   else if (top.operation == '!=') {
     top.type  = '<Boolean>'
     top.value = top.left.value != top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1648,7 +1732,10 @@ function interpret(stack) {
   else if (top.operation == '&&') {
     top.type  = '<Boolean>'
     top.value = top.left.value && top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1656,7 +1743,10 @@ function interpret(stack) {
   else if (top.operation == '||') {
     top.type  = '<Boolean>'
     top.value = top.left.value || top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1675,7 +1765,10 @@ function interpret(stack) {
       top.type  = '<String>'
       top.value = '' + top.left.value + top.right.value
     }
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1683,49 +1776,70 @@ function interpret(stack) {
   else if (top.operation == '=') {
     top.left.type = top.right.type == '<Undefined>' ? top.left.type : top.right.type
     top.left.value = top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
   // Power Assign
   else if (top.operation == '^=') {
     top.left.value = Math.pow(top.left.value,top.right.value)
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
   // Multiply Assign
   else if (top.operation == '*=') {
     top.left.value *= top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
   // Divide Assign
   else if (top.operation == '/=') {
     top.left.value /= top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
   // Remainder Assign
   else if (top.operation == '%=') {
     top.left.value %= top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
   // Add Assign
   else if (top.operation == '+=') {
     top.left.value += top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
   // Subtract Assign
   else if (top.operation == '-=') {
     top.left.value -= top.right.value
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1736,7 +1850,10 @@ function interpret(stack) {
     for (let key in right) {
       left[key] = right[key]
     }
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1751,7 +1868,10 @@ function interpret(stack) {
     else if (top.left.value == '<String>') {
       top.left.value += top.right.value
     }
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1761,7 +1881,10 @@ function interpret(stack) {
       top.left.type = top.right.type
       top.left.value = top.right.value
     }
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1771,7 +1894,10 @@ function interpret(stack) {
       top.left.type = top.right.type
       top.left.value = top.right.value
     }
-    top.operation = null
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
     stack.pop()
   }
 
@@ -1786,5 +1912,5 @@ const rl = readline.createInterface({
 
 rl.on('line', (input) => {
   interpret(stack)
-  console.log(stack)
+  console.log(JSON.stringify(stack, null, 3))
 })
