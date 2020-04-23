@@ -703,7 +703,7 @@ function ParseEnvironment({tokens,parent,args}) {
 
   if (args) {
     for (let arg of args) {
-      vars[arg] = { type: '<Undefined>' }
+      vars[arg] = { type: '<Undefined>' , value: null }
     }
   }
 
@@ -798,7 +798,7 @@ function ParseEnvironment({tokens,parent,args}) {
       if (vars[tokens[0].symbol]) {
         throw ParserError(tokens[0], `Identifier "${tokens[0].symbol}" already exists in scope`)
       }
-      vars[tokens[0].symbol] = { type: '<Undefined>' }
+      vars[tokens[0].symbol] = { type: '<Undefined>', value: null }
     }
 
     // Loop
@@ -1032,7 +1032,7 @@ function ParseTerm({tokens}) {
   }
   // Just in case
   else {
-    return { type : '<Invalid>' }
+    throw ParserError(tokens[0], `Invalid expression term`)
   }
 }
 
@@ -1040,6 +1040,7 @@ function ParseSuffix({tokens}) {
   let left = ParseTerm({tokens})
   while(tokens[0].symbol == '.' || tokens[0].symbol == '(' || tokens[0].symbol == '[') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
 
     // Dot Access
     if (operation == '.') {
@@ -1048,6 +1049,7 @@ function ParseSuffix({tokens}) {
         throw ParserError(tokens[0], `Object access expected a valid identifier`)
       }
       let op = {
+        line,
         left,
         operation,
         key : {
@@ -1063,6 +1065,7 @@ function ParseSuffix({tokens}) {
       operation = '[]'
       tokens.shift()
       let op = {
+        line,
         left,
         operation,
         key : ParseExpression({tokens})
@@ -1094,6 +1097,7 @@ function ParseSuffix({tokens}) {
       tokens.shift()
 
       let op = {
+        line,
         left,
         operation,
         args
@@ -1107,8 +1111,10 @@ function ParseSuffix({tokens}) {
 function ParsePrefix({tokens}) {
   if(tokens[0].symbol == '-' || tokens[0].symbol == '!' || tokens[0].symbol == '|') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       operation,
       right : ParsePrefix({tokens})
     }
@@ -1123,8 +1129,10 @@ function ParsePower({tokens}) {
   let left = ParsePrefix({tokens})
   if(tokens[0].symbol == '^') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParsePower({tokens})
@@ -1140,8 +1148,10 @@ function ParseProduct({tokens}) {
   let left = ParsePower({tokens})
   while(tokens[0].symbol == '*' || tokens[0].symbol == '/' || tokens[0].symbol == '%') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParsePower({tokens})
@@ -1155,8 +1165,10 @@ function ParseSum({tokens}) {
   let left = ParseProduct({tokens})
   while(tokens[0].symbol == '+' || tokens[0].symbol == '-') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseProduct({tokens})
@@ -1170,8 +1182,10 @@ function ParseUnion({tokens}) {
   let left = ParseSum({tokens})
   while(tokens[0].symbol == ':') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseSum({tokens})
@@ -1185,8 +1199,10 @@ function ParseTypeOf({tokens}) {
   let left = ParseUnion({tokens})
   while(tokens[0].symbol == '&') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseUnion({tokens})
@@ -1200,8 +1216,10 @@ function ParseRange({tokens}) {
   let left = ParseTypeOf({tokens})
   while(tokens[0].symbol == '..') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseTypeOf({tokens})
@@ -1215,8 +1233,10 @@ function ParseComparison({tokens}) {
   let left = ParseRange({tokens})
   while(tokens[0].symbol == '<' || tokens[0].symbol == '>' || tokens[0].symbol == '<=' || tokens[0].symbol == '>=') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseRange({tokens})
@@ -1230,8 +1250,10 @@ function ParseEquality({tokens}) {
   let left = ParseComparison({tokens})
   while(tokens[0].symbol == '==' || tokens[0].symbol == '!=') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseComparison({tokens})
@@ -1245,8 +1267,10 @@ function ParseLogicAnd({tokens}) {
   let left = ParseEquality({tokens})
   while(tokens[0].symbol == '&&') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseEquality({tokens})
@@ -1260,8 +1284,10 @@ function ParseLogicOr({tokens}) {
   let left = ParseLogicAnd({tokens})
   while(tokens[0].symbol == '||') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseLogicAnd({tokens})
@@ -1275,8 +1301,10 @@ function ParseStringer({tokens}) {
   let left = ParseLogicOr({tokens})
   while(tokens[0].symbol == '~') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseLogicOr({tokens})
@@ -1286,12 +1314,14 @@ function ParseStringer({tokens}) {
   return left
 }
 
-function ParseConditional({tokens}) {
+function ParseGate({tokens}) {
   let left = ParseStringer({tokens})
   while(tokens[0].symbol == '?' || tokens[0].symbol == '\\' ) {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseStringer({tokens})
@@ -1302,7 +1332,7 @@ function ParseConditional({tokens}) {
 }
 
 function ParseExpression({tokens}) {
-  return ParseConditional({tokens})
+  return ParseGate({tokens})
 }
 
 function ParseStatement({tokens}) {
@@ -1358,6 +1388,10 @@ catch (e) {
 let stack = [AST]
 let env = AST
 
+function TypeError(line, message) {
+  return `TypeError at Line ${line} - ${message}`
+}
+
 function search(variable) {
   let scope = env.scope
   while (scope != null) {
@@ -1376,6 +1410,7 @@ function interpret(stack) {
 
   // Advance to next statement
   if (top.statements != null) {
+    env = top
     if (top.at == null) {
       top.at = 0
     }
@@ -1399,33 +1434,343 @@ function interpret(stack) {
   else if (top.left && top.left.operation) {
     stack.push(top.left)
   }
-  // Traverse Right
-  else if (top.right && top.right.operation) {
-    stack.push(top.right)
-  }
   // Leftside Variables
   else if (top.left && top.left.variable) {
     top.left = search(top.left.variable)
+  }
+
+  // Truth Gate
+  else if (top.operation == '?' && !top.left.value) {
+    top.type = '<Empty>'
+    top.operation = null
+    stack.pop()
+  }
+
+  // Catch Gate
+  else if (top.operation == '\\' && !!top.left.value) {
+    top.type = top.left.type
+    top.value = top.left.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Traverse Right
+  else if (top.right && top.right.operation) {
+    stack.push(top.right)
   }
   // Rightside Variables
   else if (top.right && top.right.variable) {
     top.right = search(top.right.variable)
   }
 
-  //
-  // Operations
-
-  // Assign
-  else if (top.operation == '=') {
-    top.left.type = top.right.type
-    top.left.value = top.right.value
+  // Passed Gates
+  else if (top.operation == '\\' || top.operation == '?') {
+    top.type = top.right.type
+    top.value = top.right.value
+    top.operation = null
     stack.pop()
   }
 
-  // Addition
+  // Skip Empty Assignments
+  else if (top.right.type == '<Empty>') {
+    top.operation = null
+    stack.pop()
+  }
+
+  //
+  // Operations
+
+  // TODO: Accessors
+
+  // Negative
+  else if (top.operation == '-' && !top.left) {
+    top.type  = '<Number>'
+    top.value = -top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Not
+  else if (top.operation == '!') {
+    top.type  = '<Boolean>'
+    top.value = !top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Absolute
+  else if (top.operation == '|') {
+    top.type  = '<Number>'
+    top.value = Math.abs(top.right.value)
+    top.operation = null
+    stack.pop()
+  }
+
+  // Power
+  else if (top.operation == '^') {
+    top.type  = '<Number>'
+    top.value = Math.pow(top.left.value, top.right.value)
+    top.operation = null
+    stack.pop()
+  }
+
+  // Multiply
+  else if (top.operation == '*') {
+    top.type  = '<Number>'
+    top.value = top.left.value * top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Divide
+  else if (top.operation == '/') {
+    top.type  = '<Number>'
+    top.value = top.left.value / top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Remainder
+  else if (top.operation == '%') {
+    top.type  = '<Number>'
+    top.value = top.left.value % top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Add
   else if (top.operation == '+') {
     top.type  = '<Number>'
     top.value = top.left.value + top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Subtract
+  else if (top.operation == '-') {
+    top.type  = '<Number>'
+    top.value = top.left.value - top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Union
+  else if (top.operation == ':') {
+    top.type = '<Object>'
+    top.value = {}
+    let left = top.left.value
+    let right = top.right.value
+    for(let key in left) {
+      top.value[key] = left[key]
+    }
+    for(let key in right) {
+      top.value[key] = right[key]
+    }
+    top.operation = null
+    stack.pop()
+  }
+
+  // Range
+  else if (top.operation == '..') {
+    top.type = '<Array>'
+    top.value = []
+    let left = Math.round(top.left.value)
+    let right = Math.round(top.right.value)
+    if (left <= right) {
+      for(let i = left; i <= right; ++i) {
+        top.value.push({
+          type: '<Number>',
+          value : i
+        })
+      }
+    }
+    else {
+      for(let i = right; i >= left; --i) {
+        top.value.push({
+          type: '<Number>',
+          value : i
+        })
+      }
+    }
+    top.operation = null
+    stack.pop()
+  }
+
+  // Less Than
+  else if (top.operation == '<') {
+    top.type  = '<Boolean>'
+    top.value = top.left.value < top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Greater Than
+  else if (top.operation == '>') {
+    top.type  = '<Boolean>'
+    top.value = top.left.value > top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Less Equals
+  else if (top.operation == '<=') {
+    top.type  = '<Boolean>'
+    top.value = top.left.value <= top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Greater Equals
+  else if (top.operation == '>=') {
+    top.type  = '<Boolean>'
+    top.value = top.left.value >= top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Equality
+  else if (top.operation == '==') {
+    top.type  = '<Boolean>'
+    top.value = top.left.value == top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Inequality
+  else if (top.operation == '!=') {
+    top.type  = '<Boolean>'
+    top.value = top.left.value != top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // And
+  else if (top.operation == '&&') {
+    top.type  = '<Boolean>'
+    top.value = top.left.value && top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Or
+  else if (top.operation == '||') {
+    top.type  = '<Boolean>'
+    top.value = top.left.value || top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Stringer
+  else if (top.operation == '~') {
+    if (top.left.type == '<Array>' && top.right.type == '<Array>') {
+      top.type  = '<Array>'
+      top.value = top.left.value.concat(top.right.value)
+    }
+    else if (top.left.type == '<Array>') {
+      top.type  = '<Array>'
+      top.value = top.left.value
+      top.value.push(top.right.value)
+    }
+    else {
+      top.type  = '<String>'
+      top.value = '' + top.left.value + top.right.value
+    }
+    top.operation = null
+    stack.pop()
+  }
+
+  // Assign
+  else if (top.operation == '=') {
+    top.left.type = top.right.type == '<Undefined>' ? top.left.type : top.right.type
+    top.left.value = top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Power Assign
+  else if (top.operation == '^=') {
+    top.left.value = Math.pow(top.left.value,top.right.value)
+    top.operation = null
+    stack.pop()
+  }
+
+  // Multiply Assign
+  else if (top.operation == '*=') {
+    top.left.value *= top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Divide Assign
+  else if (top.operation == '/=') {
+    top.left.value /= top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Remainder Assign
+  else if (top.operation == '%=') {
+    top.left.value %= top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Add Assign
+  else if (top.operation == '+=') {
+    top.left.value += top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Subtract Assign
+  else if (top.operation == '-=') {
+    top.left.value -= top.right.value
+    top.operation = null
+    stack.pop()
+  }
+
+  // Union Assign
+  else if (top.operation == ':=') {
+    let left = top.left.value
+    let right = top.right.value
+    for (let key in right) {
+      left[key] = right[key]
+    }
+    top.operation = null
+    stack.pop()
+  }
+
+  // Stringer Assign
+  else if (top.operation == '~=') {
+    if (top.left.type == '<Array>' && top.right.type == '<Array>') {
+      top.left.value = top.left.value.concat(top.right.value)
+    }
+    else if (top.left.type == '<Array>') {
+      top.left.value.push(top.right.value)
+    }
+    else if (top.left.value == '<String>') {
+      top.left.value += top.right.value
+    }
+    top.operation = null
+    stack.pop()
+  }
+
+  // Optional Assign
+  else if (top.operation == '?=') {
+    if (!!top.right.value) {
+      top.left.type = top.right.type
+      top.left.value = top.right.value
+    }
+    top.operation = null
+    stack.pop()
+  }
+
+  // Set if false
+  else if (top.operation == '\=') {
+    if (!top.left.value) {
+      top.left.type = top.right.type
+      top.left.value = top.right.value
+    }
     top.operation = null
     stack.pop()
   }
