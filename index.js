@@ -1407,7 +1407,7 @@ stack.push_environment = (env, args = {}) => {
     statements : JSON.parse(JSON.origStringify(env.statements))
   }
   for (let key in args) {
-    new_env.vars[key] = args[key]
+    new_env.scope.vars[key] = args[key]
   }
   stack.push(new_env)
 }
@@ -1490,6 +1490,39 @@ function interpret(stack) {
     }
     else {
       stack.push(top.eval)
+    }
+  }
+
+  // For
+  else if (top.statement == 'FOR') {
+    if (top.in.variable) {
+      top.in = search(top.in.variable)
+    }
+    if (!top.in.hasOwnProperty('value')) {
+      stack.push(top.in)
+    }
+    else if (top.at == null) {
+      top.at = 0
+    }
+    else if (top.at < top.in.value.length) {
+      let args = {}
+      if (top.in.type == '<Array>') {
+        args[top.variable] = {
+          type: top.in.value[top.at].type,
+          value: top.in.value[top.at].value
+        }
+      }
+      else if (top.in.type == '<String>') {
+        args[top.variable] = {
+          type: '<String>',
+          value: top.in.value[top.at]
+        }
+      }
+      stack.push_environment(top.body,args)
+      ++top.at
+    }
+    else {
+      stack.pop()
     }
   }
 
@@ -1928,7 +1961,7 @@ function interpret(stack) {
     else if (top.left.type == '<Array>') {
       top.type  = '<Array>'
       top.value = top.left.value
-      top.value.push(top.right.value)
+      top.value.push(top.right)
     }
     else {
       top.type  = '<String>'
@@ -2032,7 +2065,7 @@ function interpret(stack) {
       top.left.value = top.left.value.concat(top.right.value)
     }
     else if (top.left.type == '<Array>') {
-      top.left.value.push(top.right.value)
+      top.left.value.push(top.right)
     }
     else if (top.left.value == '<String>') {
       top.left.value += top.right.value
