@@ -975,6 +975,9 @@ function ParseTerm({tokens}) {
     let array = []
     while (tokens[0].symbol != ']') {
       tokens.shift()
+      if (tokens[0].symbol == ']') {
+        break
+      }
       array.push(ParseExpression({tokens}))
       if (tokens[0].symbol == ';') {
         throw ParserError(tokens[0], `No matching ']' found in array initializer`)
@@ -1476,16 +1479,37 @@ function interpret(stack) {
     if (top.at == null) {
       top.at = 0
     }
+    else {
+      top.at++
+    }
     if (top.at < top.value.length) {
       let item = top.value[top.at]
       if (item.operation || item.init) {
         stack.push(item)
       }
-      top.at++
     }
     else {
       delete top.init
       delete top.at
+      stack.pop()
+    }
+  }
+
+  // Traverse Objects
+  else if (top.init == '{}') {
+    if (top.remaining == null) {
+      top.remaining = Object.keys(top.value)
+    }
+    if (top.remaining.length) {
+      let item = top.value[top.remaining[0]]
+      if (item.operation || item.init) {
+        stack.push(item)
+      }
+      top.remaining.shift()
+    }
+    else {
+      delete top.init
+      delete top.remaining
       stack.pop()
     }
   }
