@@ -707,7 +707,10 @@ function ParseEnvironment({tokens,parent,args}) {
     }
   }
 
-  environment.scope = { parent, vars }
+  environment.scope = { vars }
+  if (parent) {
+    environment.scope.parent = parent.scope
+  }
   environment.statements = []
 
   //
@@ -815,7 +818,15 @@ function ParseEnvironment({tokens,parent,args}) {
         }
         tokens.shift()
       }
-      loop.body = ParseBlock({ tokens, parent: environment.scope })
+      if (tokens[0].symbol != '{') {
+        throw ParserError(tokens[0], `Expected '{' at start of code block`)
+      }
+      tokens.shift()
+      loop.body = ParseEnvironment({tokens, parent: environment, args})
+      if (tokens[0].symbol != '}') {
+        throw ParserError(tokens[0], `Expected '}' at end of code block`)
+      }
+      tokens.shift()
       environment.statements.push(loop)
     }
 
@@ -836,7 +847,7 @@ function ParseEnvironment({tokens,parent,args}) {
       }
       tokens.shift()
 
-      statement.body = ParseBlock({ tokens, parent: environment.scope })
+      statement.body = ParseBlock({ tokens, parent: environment })
       environment.statements.push(statement)
     }
 
@@ -863,7 +874,7 @@ function ParseEnvironment({tokens,parent,args}) {
         statement.statement = 'ELSE'
       }
 
-      statement.body = ParseBlock({ tokens, parent: environment.scope })
+      statement.body = ParseBlock({ tokens, parent: environment })
       environment.statements.push(statement)
     }
 
@@ -895,7 +906,7 @@ function ParseEnvironment({tokens,parent,args}) {
       }
       tokens.shift()
 
-      statement.body = ParseBlock({ tokens, parent: environment.scope, args: [statement.variable] })
+      statement.body = ParseBlock({ tokens, parent: environment, args: [statement.variable] })
       environment.statements.push(statement)
     }
 
@@ -1057,7 +1068,7 @@ function ParseSuffix({tokens}) {
         line,
         left,
         operation,
-        key : {
+        right : {
           type : '<String>',
           value : tokens[0].symbol
         }
@@ -1073,7 +1084,7 @@ function ParseSuffix({tokens}) {
         line,
         left,
         operation,
-        key : ParseExpression({tokens})
+        right : ParseExpression({tokens})
       }
       left = op
       if (tokens[0].symbol != ']') {
@@ -1344,8 +1355,10 @@ function ParseStatement({tokens}) {
   let left = ParseExpression({tokens})
   if (tokens[0].type == 'ASSIGN') {
     let operation = tokens[0].symbol
+    let line = tokens[0].line
     tokens.shift()
     let op = {
+      line,
       left,
       operation,
       right : ParseExpression({tokens})
@@ -1407,7 +1420,7 @@ stack.push_environment = (env, args = {}) => {
   stack.push(new_env)
 }
 
-stack.push_environment(env)
+stack.push(env)
 
 function TypeError(line, message) {
   return `TypeError at Line ${line} - ${message}`
@@ -1416,8 +1429,8 @@ function TypeError(line, message) {
 function search(variable) {
   let scope = env.scope
   while (scope != null) {
-    if (env.scope.vars[variable]) {
-      return env.scope.vars[variable]
+    if (scope.vars[variable]) {
+      return scope.vars[variable]
     }
     else {
       scope = scope.parent
@@ -1442,6 +1455,11 @@ function interpret(stack) {
   }
 
   // Expressions
+  else if (top.statement == 'LOOP') {
+    stack.push_environment(top.body)
+  }
+
+  // Expressions
   else if (top.statement == 'EXPRESSION') {
     stack.pop()
     stack.push(top.expression)
@@ -1453,6 +1471,10 @@ function interpret(stack) {
   // Leftside Variables
   else if (top.left && top.left.variable) {
     top.left = search(top.left.variable)
+  }
+  // Leftside Pointers
+  else if (top.left && top.left.type == '<Pointer>') {
+    top.left = top.left.value
   }
 
   // Truth Gate
@@ -1483,6 +1505,10 @@ function interpret(stack) {
   // Rightside Variables
   else if (top.right && top.right.variable) {
     top.right = search(top.right.variable)
+  }
+  // Rightside Pointers
+  else if (top.right && top.right.type == '<Pointer>') {
+    top.right = top.right.value
   }
 
   // Traverse Arrays
@@ -1550,16 +1576,53 @@ function interpret(stack) {
 
   // Dot Access
   else if (top.operation == '.') {
-    top.type  = top.left.value[top.key.value].type
-    top.value = top.left.value[top.key.value].value
+    top.type  = '<Pointer>'
+    top.value = top.left.value[top.right.value]
     delete top.operation
     delete top.line
     delete top.left
-    delete top.key
+    delete top.right
     stack.pop()
   }
 
-  // TODO: Arraylike Access
+  // Arraylike Access
+  else if (top.operation == '[]') {
+    let left = top.left
+    let right = top.right
+    // Arrays
+    if (left.type == '<Array>') {
+      // Numerical Indexing
+      if (right.type == '<Number>') {
+        let index = Math.round(right.value)
+        top.type  = '<Pointer>'
+        top.value = left.value[index]
+      }
+      // Slice Indexing
+      else if (right.type == '<Array>') {
+        let slice = []
+        for (let key of right.value) {
+          if (key.type == '<Number>') {
+            let index = Math.round(key.value)
+            slice.push(left.value[index])
+          }
+        }
+        top.type = '<Array>'
+        top.value = slice
+      }
+    }
+    else if (left.type == '<Object>') {
+      // String Access
+      if (right.type == '<String>') {
+        top.type  = '<Pointer>'
+        top.value = left.value[right.value]
+      }
+    }
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
+    stack.pop()
+  }
 
   // TODO: Function Call
 
