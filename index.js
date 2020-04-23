@@ -1390,8 +1390,24 @@ catch (e) {
 //  I N T E R P R E T E R  //
 /////////////////////////////
 
-let stack = [AST]
+let stack = []
 let env = AST
+
+stack.push_environment = (env, args = {}) => {
+  let new_env = {
+    scope : {
+      parent: env.scope.parent,
+      vars: JSON.parse(JSON.origStringify(env.scope.vars))
+    },
+    statements : JSON.parse(JSON.origStringify(env.statements))
+  }
+  for (let key in args) {
+    new_env.vars[key] = args[key]
+  }
+  stack.push(new_env)
+}
+
+stack.push_environment(env)
 
 function TypeError(line, message) {
   return `TypeError at Line ${line} - ${message}`
@@ -1416,14 +1432,9 @@ function interpret(stack) {
   // Advance to next statement
   if (top.statements != null) {
     env = top
-    if (top.at == null) {
-      top.at = 0
-    }
-    else {
-      ++top.at
-    }
-    if (top.statements[top.at]) {
-      stack.push(top.statements[top.at])
+    if (top.statements[0]) {
+      stack.push(top.statements[0])
+      top.statements.shift()
     }
     else {
       stack.pop()
@@ -1526,7 +1537,7 @@ function interpret(stack) {
   }
 
   // Skip Empty Assignments
-  else if (top.right.type == '<Empty>') {
+  else if (top.right && top.right.type == '<Empty>') {
     delete top.operation
     delete top.line
     delete top.left
@@ -1537,7 +1548,20 @@ function interpret(stack) {
   //
   // Operations
 
-  // TODO: Accessors
+  // Dot Access
+  else if (top.operation == '.') {
+    top.type  = top.left.value[top.key.value].type
+    top.value = top.left.value[top.key.value].value
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.key
+    stack.pop()
+  }
+
+  // TODO: Arraylike Access
+
+  // TODO: Function Call
 
   // Negative
   else if (top.operation == '-' && !top.left) {
@@ -1545,7 +1569,6 @@ function interpret(stack) {
     top.value = -top.right.value
     delete top.operation
     delete top.line
-    delete top.left
     delete top.right
     stack.pop()
   }
@@ -1556,7 +1579,6 @@ function interpret(stack) {
     top.value = !top.right.value
     delete top.operation
     delete top.line
-    delete top.left
     delete top.right
     stack.pop()
   }
@@ -1567,7 +1589,6 @@ function interpret(stack) {
     top.value = Math.abs(top.right.value)
     delete top.operation
     delete top.line
-    delete top.left
     delete top.right
     stack.pop()
   }
