@@ -376,7 +376,7 @@ while (cur < src.length) {
     token_list.push({
       id : token_list.length,
       type : 'ASSIGN',
-      symbol : '\\\\=',
+      symbol : '\\=',
       line : `${line}:${col}`
     })
     next()
@@ -1456,7 +1456,7 @@ function interpret(stack) {
     if (top.times.variable) {
       top.times = search(top.times.variable)
     }
-    if (!top.times.hasOwnProperty('value')) {
+    if (!top.times.hasOwnProperty('value') || top.times.init) {
       stack.push(top.times)
     }
     else if (top.remaining == null) {
@@ -1479,7 +1479,7 @@ function interpret(stack) {
     if (top.eval.variable) {
       top.eval = search(top.eval.variable)
     }
-    if (top.eval.hasOwnProperty('value')) {
+    if (top.eval.hasOwnProperty('value') && !top.eval.init) {
       if (top.eval.value) {
         stack.push_environment(top.body)
         top.eval = null
@@ -1498,7 +1498,7 @@ function interpret(stack) {
     if (top.in.variable) {
       top.in = search(top.in.variable)
     }
-    if (!top.in.hasOwnProperty('value')) {
+    if (!top.in.hasOwnProperty('value') || top.in.init) {
       stack.push(top.in)
     }
     else if (top.at == null) {
