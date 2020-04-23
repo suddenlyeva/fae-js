@@ -818,15 +818,7 @@ function ParseEnvironment({tokens,parent,args}) {
         }
         tokens.shift()
       }
-      if (tokens[0].symbol != '{') {
-        throw ParserError(tokens[0], `Expected '{' at start of code block`)
-      }
-      tokens.shift()
-      loop.body = ParseEnvironment({tokens, parent: environment, args})
-      if (tokens[0].symbol != '}') {
-        throw ParserError(tokens[0], `Expected '}' at end of code block`)
-      }
-      tokens.shift()
+      loop.body = ParseBlock({ tokens, parent: environment })
       environment.statements.push(loop)
     }
 
@@ -1461,6 +1453,9 @@ function interpret(stack) {
 
   // N Loop
   else if (top.statement == 'NLOOP') {
+    if (top.times.variable) {
+      top.times = search(top.times.variable)
+    }
     if (!top.times.hasOwnProperty('value')) {
       stack.push(top.times)
     }
@@ -1473,6 +1468,28 @@ function interpret(stack) {
     }
     else {
       stack.pop()
+    }
+  }
+
+  // While
+  else if (top.statement == 'WHILE') {
+    if (top.eval == null) {
+      top.eval = JSON.parse(JSON.origStringify(top.condition))
+    }
+    if (top.eval.variable) {
+      top.eval = search(top.eval.variable)
+    }
+    if (top.eval.hasOwnProperty('value')) {
+      if (top.eval.value) {
+        stack.push_environment(top.body)
+        top.eval = null
+      }
+      else {
+        stack.pop()
+      }
+    }
+    else {
+      stack.push(top.eval)
     }
   }
 
@@ -1538,6 +1555,9 @@ function interpret(stack) {
     }
     if (top.at < top.value.length) {
       let item = top.value[top.at]
+      if (item.variable) {
+        top.value[top.at] = search(item.variable)
+      }
       if (item.operation || item.init) {
         stack.push(item)
       }
@@ -1556,6 +1576,9 @@ function interpret(stack) {
     }
     if (top.remaining.length) {
       let item = top.value[top.remaining[0]]
+      if (item.variable) {
+        top.value[top.remaining[0]] = search(item.variable)
+      }
       if (item.operation || item.init) {
         stack.push(item)
       }
@@ -1624,6 +1647,27 @@ function interpret(stack) {
           }
         }
         top.type = '<Array>'
+        top.value = slice
+      }
+    }
+    // Strings
+    else if (left.type == '<String>') {
+      // Numerical Indexing
+      if (right.type == '<Number>') {
+        let index = Math.round(right.value)
+        top.type  = '<String>'
+        top.value = left.value[index]
+      }
+      // Slice Indexing
+      else if (right.type == '<Array>') {
+        let slice = ''
+        for (let key of right.value) {
+          if (key.type == '<Number>') {
+            let index = Math.round(key.value)
+            slice += left.value[index]
+          }
+        }
+        top.type = '<String>'
         top.value = slice
       }
     }
