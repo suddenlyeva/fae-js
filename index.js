@@ -845,10 +845,17 @@ function ParseEnvironment({tokens,parent,args}) {
 
     // Else and Else If
     else if (tokens[0].symbol == 'else') {
+      let top = environment.statements[environment.statements.length - 1]
+      while (top.else) {
+        top = top.else
+      }
+      if (top.statement != 'IF' && top.statement != 'ELIF') {
+        throw ParserError(tokens[0], `Else statement does not follow if block`)
+      }
       tokens.shift()
       let statement = {}
       if (tokens[0].symbol == 'if') {
-        statement.statement = 'ELSE_IF'
+        statement.statement = 'ELIF'
         tokens.shift()
 
         if (tokens[0].symbol != '(') {
@@ -867,7 +874,7 @@ function ParseEnvironment({tokens,parent,args}) {
       }
 
       statement.body = ParseBlock({ tokens, parent: environment })
-      environment.statements.push(statement)
+      top.else = statement
     }
 
     // For
@@ -1526,10 +1533,37 @@ function interpret(stack) {
     }
   }
 
+  // If Elif
+  else if (top.statement == 'IF' || top.statement == 'ELIF') {
+    if (top.condition.variable) {
+      top.condition = search(top.condition.variable)
+    }
+    if (!top.condition.hasOwnProperty('value') || top.condition.init) {
+      stack.push(top.condition)
+    }
+    else {
+      stack.pop()
+      if (top.condition.value) {
+        stack.push_environment(top.body)
+      }
+      else if (top.else) {
+        stack.push(top.else)
+      }
+    }
+  }
+
+  // Else
+  else if (top.statement == 'ELSE') {
+    stack.pop()
+    stack.push_environment(top.body)
+  }
+
   // Expressions
   else if (top.statement == 'EXPRESSION') {
     stack.pop()
-    stack.push(top.expression)
+    if (top.expression.operation || top.expression.init) {
+      stack.push(top.expression)
+    }
   }
   // Traverse Left
   else if (top.left && (top.left.operation || top.left.init)) {
