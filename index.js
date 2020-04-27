@@ -1417,6 +1417,7 @@ stack.push_environment = (env, args = {}) => {
     new_env.scope.vars[key] = args[key]
   }
   stack.push(new_env)
+  return new_env
 }
 
 stack.push(env)
@@ -1565,6 +1566,22 @@ function interpret(stack) {
       stack.push(top.expression)
     }
   }
+
+  // Return Statements
+  else if (top.statement == 'RETURN') {
+    if (top.expression.variable) {
+      top.expression = search(top.expression.variable)
+    }
+    if (top.expression.operation || top.expression.init) {
+      stack.push(top.expression)
+    }
+    else {
+      env.value = top.expression.value
+      env.type = top.expression.type
+      stack.pop()
+    }
+  }
+  
   // Traverse Left
   else if (top.left && (top.left.operation || top.left.init)) {
     stack.push(top.left)
@@ -1752,7 +1769,42 @@ function interpret(stack) {
     stack.pop()
   }
 
-  // TODO: Function Call
+  // Function Call
+  else if (top.operation == '()') {
+    if (top.at == null) {
+      top.at = 0
+    }
+    else {
+      top.at++
+    }
+    if (top.at < top.args.length) {
+      let item = top.args[top.at]
+      if (item.variable) {
+        top.args[top.at] = search(item.variable)
+      }
+      if (item.operation || item.init) {
+        stack.push(item)
+      }
+    }
+    else if (top.fn == null) {
+      let args = {}
+      for (let i =  0; i < top.args.length && i < top.left.args.length; i++) {
+        args[top.left.args[i]] = top.args[i]
+      }
+      top.fn = stack.push_environment(top.left.body, args)
+    }
+    else {
+      top.value = top.fn.value
+      top.type = top.fn.type
+      delete top.args
+      delete top.operation
+      delete top.line
+      delete top.left
+      delete top.at
+      delete top.fn
+      stack.pop()
+    }
+  }
 
   // Negative
   else if (top.operation == '-' && !top.left) {
