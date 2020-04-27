@@ -932,6 +932,9 @@ function ParseEnvironment({tokens,parent,args}) {
     // Yield Statements
     else if (tokens[0].symbol == 'yield') {
       tokens.shift()
+      environment.statements.push({
+        statement: 'YIELD'
+      })
       if (tokens[0].symbol != ';') {
         throw ParserError(tokens[0], `Expected ';' at end of statement`)
       }
@@ -1440,6 +1443,10 @@ function search(variable) {
 }
 
 function interpret(stack) {
+  if (!stack.length) {
+    return false
+  }
+  
   let top = stack[stack.length - 1]
 
   // Advance to next statement
@@ -1581,7 +1588,13 @@ function interpret(stack) {
       stack.pop()
     }
   }
-  
+
+  // Yield Statements
+  else if (top.statement == 'YIELD') {
+    stack.pop()
+    return false
+  }
+
   // Traverse Left
   else if (top.left && (top.left.operation || top.left.init)) {
     stack.push(top.left)
@@ -2188,7 +2201,7 @@ function interpret(stack) {
     delete top.right
     stack.pop()
   }
-
+  return true
 }
 
 const readline = require('readline')
@@ -2199,6 +2212,7 @@ const rl = readline.createInterface({
 })
 
 rl.on('line', (input) => {
-  interpret(stack)
-  console.log(JSON.stringify(stack, null, 3))
+  while (interpret(stack)){
+    console.log(JSON.stringify(stack, null, 3))
+  }
 })
