@@ -777,7 +777,12 @@ function ParseEnvironment({tokens,parent,args}) {
         parent: environment, 
         args: func.args
       })
-      // func.value = { type: 'UNDEFINED' }
+      if (type == 'TASK') {
+        func.body.running = {
+            type : '<Boolean>',
+            value : true
+        }
+      }
       vars[id] = func
       let start_id = tokens.indexOf(func_start)
       tokens.splice(start_id, t - start_id)
@@ -1397,7 +1402,7 @@ function ParseBlock({tokens,parent,args}) {
 let std = { scope: { vars: {
   print: {
     native(thing) {
-      process.stdout.write(thing.value)
+      process.stdout.write(thing.value.toString())
       return { type: '<Void>' }
     }
   },
@@ -1425,12 +1430,23 @@ function create_stack(env) {
   let stack = []
   
   stack.push_environment = (env, args = {}) => {
+    let statements = []
+    for (let statement of env.statements) {
+      let new_statement = {}
+      for (let key of Object.keys(statement)) {
+        if (key == 'body') {
+          new_statement.body = statement.body
+        }
+        else {
+          new_statement[key] = JSON.parse(JSON.origStringify(statement[key]))
+        }
+      }
+      statements.push(new_statement)
+    }
     let new_env = {
-      scope : {
-        parent: env.scope.parent,
-        vars: JSON.parse(JSON.origStringify(env.scope.vars))
-      },
-      statements : JSON.parse(JSON.origStringify(env.statements))
+      scope : env.scope,
+      statements,
+      running : env.running
     }
     for (let key in args) {
       new_env.scope.vars[key] = args[key]
@@ -1498,6 +1514,9 @@ function interpret(stack) {
       top.statements.shift()
     }
     else {
+      if (top.running) {
+        top.running.value = false
+      }
       stack.pop()
     }
   }
@@ -1842,8 +1861,8 @@ function interpret(stack) {
     }
     else if (top.left.native != null) {
       let ret = top.left.native(...top.args)
-      top.value = ret.value
       top.type = ret.type
+      top.value = ret.value
       delete top.args
       delete top.operation
       delete top.line
@@ -1856,11 +1875,24 @@ function interpret(stack) {
       for (let i =  0; i < top.args.length && i < top.left.args.length; i++) {
         args[top.left.args[i]] = top.args[i]
       }
-      top.fn = stack.push_environment(top.left.body, args)
+      if (top.left.type == 'TASK') {
+        machine.create_thread(top.left.body, args)
+        top.type = '<Pointer>'
+        top.value = top.left.body.running
+        delete top.args
+        delete top.operation
+        delete top.line
+        delete top.left
+        delete top.at
+        stack.pop()
+      }
+      else {
+        top.fn = stack.push_environment(top.left.body, args)
+      }
     }
     else {
-      top.value = top.fn.value
       top.type = top.fn.type
+      top.value = top.fn.value
       delete top.args
       delete top.operation
       delete top.line
