@@ -1390,9 +1390,23 @@ function ParseBlock({tokens,parent,args}) {
   return env
 }
 
+///////////////////////////////////////
+//  S T A N D A R D   L I B R A R Y  //
+///////////////////////////////////////
+
+let std = { scope: { vars: {
+  print: {
+    native(thing) {
+      console.log(JSON.stringify(thing.value))
+      return { type: '<Void>' }
+    }
+  },
+}}}
+
+
 let AST
 try {
-  AST = ParseEnvironment({ tokens: token_list })
+  AST = ParseEnvironment({ tokens: token_list, parent: std })
   if (token_list[0].type != 'EOF') {
     throw ParserError(token_list[0], `Invalid statement`)
   }
@@ -1826,6 +1840,17 @@ function interpret(stack) {
         stack.push(item)
       }
     }
+    else if (top.left.native != null) {
+      let ret = top.left.native(...top.args)
+      top.value = ret.value
+      top.type = ret.type
+      delete top.args
+      delete top.operation
+      delete top.line
+      delete top.left
+      delete top.at
+      stack.pop()
+    }
     else if (top.fn == null) {
       let args = {}
       for (let i =  0; i < top.args.length && i < top.left.args.length; i++) {
@@ -2238,7 +2263,13 @@ const rl = readline.createInterface({
   output: process.stdout
 })
 
+machine.advance()
+if (!machine.threads.length) {
+  rl.close()
+}
 rl.on('line', (input) => {
   machine.advance()
-  console.log(JSON.stringify(machine.threads, null, 3))
+  if (!machine.threads.length) {
+    rl.close()
+  }
 })
