@@ -1397,7 +1397,7 @@ function ParseBlock({tokens,parent,args}) {
 let std = { scope: { vars: {
   print: {
     native(thing) {
-      console.log(JSON.stringify(thing.value))
+      process.stdout.write(thing.value)
       return { type: '<Void>' }
     }
   },
