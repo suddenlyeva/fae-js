@@ -774,7 +774,7 @@ function ParseEnvironment({tokens,parent,args}) {
       let func_tokens = tokens.slice(block_start, t)
       func.body = ParseEnvironment({
         tokens: func_tokens, 
-        parent: environment.scope, 
+        parent: environment, 
         args: func.args
       })
       // func.value = { type: 'UNDEFINED' }
@@ -1405,25 +1405,52 @@ catch (e) {
 //  I N T E R P R E T E R  //
 /////////////////////////////
 
-let stack = []
 let env = AST
 
-stack.push_environment = (env, args = {}) => {
-  let new_env = {
-    scope : {
-      parent: env.scope.parent,
-      vars: JSON.parse(JSON.origStringify(env.scope.vars))
-    },
-    statements : JSON.parse(JSON.origStringify(env.statements))
+function create_stack(env) {
+  let stack = []
+  
+  stack.push_environment = (env, args = {}) => {
+    let new_env = {
+      scope : {
+        parent: env.scope.parent,
+        vars: JSON.parse(JSON.origStringify(env.scope.vars))
+      },
+      statements : JSON.parse(JSON.origStringify(env.statements))
+    }
+    for (let key in args) {
+      new_env.scope.vars[key] = args[key]
+    }
+    stack.push(new_env)
+    return new_env
   }
-  for (let key in args) {
-    new_env.scope.vars[key] = args[key]
-  }
-  stack.push(new_env)
-  return new_env
+  if (env) stack.push(env)
+  return stack
 }
 
-stack.push(env)
+let machine = {
+  threads : [create_stack(env)],
+  at : 0
+}
+
+machine.create_thread = (env, args = {}) => {
+  let new_stack = create_stack()
+  new_stack.push_environment(env,args)
+  machine.at++
+  machine.threads.splice(machine.at,0,new_stack)
+}
+
+machine.advance = () => {
+  while (machine.at >= 0) {
+    while(interpret(machine.threads[machine.at])) {}
+    if (!machine.threads[machine.at].length) {
+      machine.threads.splice(machine.at,1)
+    }
+    machine.at--
+  }
+
+  machine.at = machine.threads.length - 1
+}
 
 function TypeError(line, message) {
   return `TypeError at Line ${line} - ${message}`
@@ -2212,7 +2239,6 @@ const rl = readline.createInterface({
 })
 
 rl.on('line', (input) => {
-  while (interpret(stack)){
-    console.log(JSON.stringify(stack, null, 3))
-  }
+  machine.advance()
+  console.log(JSON.stringify(machine.threads, null, 3))
 })
