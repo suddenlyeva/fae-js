@@ -788,10 +788,7 @@ function ParseEnvironment({tokens,parent,args}) {
       tokens.splice(start_id, t - start_id)
       t = start_id
     }
-    else if (tokens[t].symbol == 'loop' || tokens[t].symbol == 'if' || tokens[t].symbol == 'while' || tokens[t].symbol == 'for' || tokens[t].symbol == 'else' ) {
-      while (tokens[t].symbol != '{') {
-        ++t
-      }
+    else if (tokens[t].symbol == '{') {
       ++t
       let depth = 1
       while (depth > 0) {
