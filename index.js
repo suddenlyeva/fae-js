@@ -788,6 +788,22 @@ function ParseEnvironment({tokens,parent,args}) {
       tokens.splice(start_id, t - start_id)
       t = start_id
     }
+    else if (tokens[t].symbol == 'loop' || tokens[t].symbol == 'if' || tokens[t].symbol == 'while' || tokens[t].symbol == 'for' || tokens[t].symbol == 'else' ) {
+      while (tokens[t].symbol != '{') {
+        ++t
+      }
+      ++t
+      let depth = 1
+      while (depth > 0) {
+        if (tokens[t].symbol == '{') {
+          ++depth
+        }
+        if (tokens[t].symbol == '}') {
+          --depth
+        }
+        ++t
+      }
+    }
     else {
       ++t
     }
@@ -1448,6 +1464,14 @@ function create_stack(env) {
       statements,
       running : env.running
     }
+    for (let key in env.scope.vars) {
+      if (env.scope.vars[key].hasOwnProperty('value')) {
+        new_env.scope.vars[key] = JSON.parse(JSON.origStringify(env.scope.vars[key]))
+      }
+      else {
+        new_env.scope.vars[key] = env.scope.vars[key]
+      }
+    }
     for (let key in args) {
       new_env.scope.vars[key] = args[key]
     }
@@ -1481,6 +1505,20 @@ machine.advance = () => {
 
   machine.at = machine.threads.length - 1
 }
+
+// machine.advance = () => {
+//   if (machine.at >= 0) {
+//     if(!interpret(machine.threads[machine.at])) {
+//       if (!machine.threads[machine.at].length) {
+//         machine.threads.splice(machine.at,1)
+//       }
+//       machine.at--
+//     }
+//   }
+//   else {
+//     machine.at = machine.threads.length - 1
+//   }
+// }
 
 function TypeError(line, message) {
   return `TypeError at Line ${line} - ${message}`
