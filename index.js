@@ -719,9 +719,22 @@ function ParseEnvironment({tokens,parent,args}) {
   while (t < tokens.length) {
     // Function and Task Declarations
     if (tokens[t].symbol == 'function' || tokens[t].symbol == 'task') {
+      let extension = ''
       let func_start = tokens[t]
       let type = tokens[t].symbol == 'function' ? 'FUNCTION' : 'TASK'
       ++t
+      if (tokens[t].symbol == '<') {
+        ++t
+        if (tokens[t].type != 'IDENTIFIER' && tokens[t].symbol != '*') {
+          throw ParserError(tokens[t], 'Expected a valid type identifier')
+        }
+        extension = `<${tokens[t].symbol}>`
+        ++t
+        if (tokens[t].symbol != '>') {
+          throw ParserError(tokens[t], `Expected '>'`)
+        }
+        ++t
+      }
       if (tokens[t].type != 'IDENTIFIER') {
         throw ParserError(tokens[t], 'Expected a valid identifier')
       }
@@ -783,7 +796,15 @@ function ParseEnvironment({tokens,parent,args}) {
             value : true
         }
       }
-      vars[id] = func
+      if (extension) {
+        if (!vars[extension]) {
+          vars[extension] = {}
+        }
+        vars[extension][id] = func
+      }
+      else {
+        vars[id] = func
+      }
       let start_id = tokens.indexOf(func_start)
       tokens.splice(start_id, t - start_id)
       t = start_id
@@ -1139,6 +1160,9 @@ function ParseSuffix({tokens}) {
       }
       left = op
       tokens.shift()
+      if (tokens[0].symbol == '(') {
+        op.operation = '.extension'
+      }
     }
     // Arraylike Access
     else if (operation == '[') {
@@ -1634,9 +1658,24 @@ function search(variable) {
   throw `"${variable}" is undefined`
 }
 
-function try_search(variable) {
+function try_search(variable,{type,polytype}) {
   let scope = env.scope
   while (scope != null) {
+    if (type) {
+      if (polytype) {
+        for (let t of polytype) {
+          if (scope.vars[`<${t}>`] && scope.vars[`<${t}>`][variable]) {
+            return scope.vars[`<${t}>`][variable]
+          }
+        }
+      }
+      if (scope.vars[`<${type}>`] && scope.vars[`<${type}>`][variable]) {
+        return scope.vars[`<${type}>`][variable]
+      }
+      if (type == '<Object>' && scope.vars[`<*>`] && scope.vars[`<*>`][variable]) {
+        return scope.vars[`<*>`][variable]
+      }
+    }
     if (scope.vars[variable]) {
       return scope.vars[variable]
     }
@@ -1982,6 +2021,18 @@ function interpret(stack) {
     stack.pop()
   }
 
+  // Dot Access
+  else if (top.operation == '.extension') {
+    top.type  = '<Pointer>'
+    top.value = try_search(top.right.value,top.left)
+    top.value.caller = top.left
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
+    stack.pop()
+  }
+
   // Arraylike Access
   else if (top.operation == '[]') {
     let left = top.left
@@ -2060,6 +2111,9 @@ function interpret(stack) {
       }
     }
     else if (top.left.native != null) {
+      if (top.left.caller) {
+        top.args.unshift(top.left.caller)
+      }
       let ret = top.left.native(...top.args)
       top.type = ret.type
       top.polytype = ret.polytype
@@ -2073,6 +2127,9 @@ function interpret(stack) {
     }
     else if (top.fn == null) {
       let args = {}
+      if (top.left.caller) {
+        args.this = top.left.caller
+      }
       for (let i =  0; i < top.args.length && i < top.left.args.length; i++) {
         args[top.left.args[i]] = top.args[i]
       }
