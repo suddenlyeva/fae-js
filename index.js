@@ -1494,7 +1494,7 @@ let std = { scope: { vars: {
   },
 }}}
 
-std['<Number>'] = {
+std.scope.vars['<Number>'] = {
   String: {
     native(number) {
       return {
@@ -1507,40 +1507,40 @@ std['<Number>'] = {
     native(number) {
       return {
         type: '<Boolean>',
-        value: number.value === 0
+        value: number.value !== 0
       }
     }
   }
 }
 
-std['<String>'] = {
+std.scope.vars['<String>'] = {
   Boolean: {
     native(string) {
       return {
         type: '<Boolean>',
-        value: string.value === ''
+        value: string.value !== ''
       }
     }
   }
 }
 
-std['<Array>'] = {
+std.scope.vars['<Array>'] = {
   Boolean: {
     native(array) {
       return {
         type: '<Boolean>',
-        value: array.value === []
+        value: array.value.length !== 0
       }
     }
   }
 }
 
-std['<Object>'] = {
+std.scope.vars['<Object>'] = {
   Boolean: {
     native(object) {
       return {
         type: '<Boolean>',
-        value: Object.keys(object.value).length === 0 && object.value.constructor === Object
+        value: Object.keys(object.value).length !== 0
       }
     }
   }
@@ -1669,8 +1669,8 @@ function try_search(variable,{type,polytype}) {
           }
         }
       }
-      if (scope.vars[`<${type}>`] && scope.vars[`<${type}>`][variable]) {
-        return scope.vars[`<${type}>`][variable]
+      if (scope.vars[type] && scope.vars[type][variable]) {
+        return scope.vars[type][variable]
       }
       if (type == '<Object>' && scope.vars[`<*>`] && scope.vars[`<*>`][variable]) {
         return scope.vars[`<*>`][variable]
