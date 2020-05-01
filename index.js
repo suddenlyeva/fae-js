@@ -1055,6 +1055,50 @@ function ParseTerm({tokens}) {
     }
     return term
   }
+  // Type Constructors
+  else if (tokens[0].symbol == '<') {
+    let polytype = []
+    let term
+    while (tokens[0].symbol != '>') {
+      tokens.shift()
+      if (tokens[0].type != 'IDENTIFIER') {
+        throw ParserError(tokens[0], `Expected a valid identifier in type constructor`)
+      }
+      if (['Number','String','Boolean','Array'].includes(tokens[0].symbol)) {
+        term = {
+          type: `<${tokens[0].symbol}>`,
+          value: 
+            tokens[0].symbol == 'Number' ? 0 :
+            tokens[0].symbol == 'String' ? '' :
+            tokens[0].symbol == 'Boolean' ? false :
+            []
+        }
+        tokens.shift()
+        if (tokens[0].symbol == ',' ) {
+          throw ParserError(tokens[0], `Primitives can't be used in a union type constructor.`)
+        }
+        if (tokens[0].symbol != '>') {
+          throw ParserError(tokens[0], ` Expected '>' in type constructor.`)
+        }
+        break
+      }
+      polytype.push(tokens[0].symbol)
+      tokens.shift()
+      if (tokens[0].symbol != '>' && tokens[0].symbol != ',' ) {
+        throw ParserError(tokens[0], `Expected '>' or ',' in type constructor.`)
+      }
+    }
+    tokens.shift()
+    if (polytype.length) {
+      term = {
+        init: '<>',
+        type: '<Object>',
+        polytype,
+        value: {}
+      }
+    }
+    return term
+  }
   // Nested Expressions
   else if (tokens[0].symbol == '(') {
     let start_parentheses = tokens[0]
@@ -1415,12 +1459,68 @@ function ParseBlock({tokens,parent,args}) {
 let std = { scope: { vars: {
   print: {
     native(thing) {
-      process.stdout.write(thing.value.toString())
+      if (thing.type == '<Object>') {
+        process.stdout.write(JSON.stringify(thing, null, 2))
+      }
+      else {
+        process.stdout.write(thing.value.toString())
+      }
       return { type: '<Void>' }
     }
   },
 }}}
 
+std['<Number>'] = {
+  String: {
+    native(number) {
+      return {
+        type: '<String>',
+        value: number.value.toString()
+      }
+    }
+  },
+  Boolean: {
+    native(number) {
+      return {
+        type: '<Boolean>',
+        value: number.value === 0
+      }
+    }
+  }
+}
+
+std['<String>'] = {
+  Boolean: {
+    native(string) {
+      return {
+        type: '<Boolean>',
+        value: string.value === ''
+      }
+    }
+  }
+}
+
+std['<Array>'] = {
+  Boolean: {
+    native(array) {
+      return {
+        type: '<Boolean>',
+        value: array.value === []
+      }
+    }
+  }
+}
+
+std['<Object>'] = {
+  Boolean: {
+    native(object) {
+      return {
+        type: '<Boolean>',
+        value: Object.keys(object.value).length === 0 && object.value.constructor === Object
+      }
+    }
+  }
+}
 
 let AST
 try {
@@ -1532,6 +1632,19 @@ function search(variable) {
     }
   }
   throw `"${variable}" is undefined`
+}
+
+function try_search(variable) {
+  let scope = env.scope
+  while (scope != null) {
+    if (scope.vars[variable]) {
+      return scope.vars[variable]
+    }
+    else {
+      scope = scope.parent
+    }
+  }
+  return null
 }
 
 function interpret(stack) {
@@ -1679,6 +1792,7 @@ function interpret(stack) {
     }
     else {
       env.value = top.expression.value
+      env.polytype = top.expression.polytype
       env.type = top.expression.type
       stack.pop()
     }
@@ -1716,7 +1830,30 @@ function interpret(stack) {
   // Catch Gate
   else if (top.operation == '\\' && !!top.left.value) {
     top.type = top.left.type
+    top.polytype = top.left.polytype
     top.value = top.left.value
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
+    stack.pop()
+  }
+
+  // And Left
+  else if (top.operation == '&&' && !top.left.value) {
+    top.type  = '<Boolean>'
+    top.value = false
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
+    stack.pop()
+  }
+
+  // Or Left
+  else if (top.operation == '||' && !!top.left.value) {
+    top.type  = '<Boolean>'
+    top.value = true
     delete top.operation
     delete top.line
     delete top.left
@@ -1783,10 +1920,38 @@ function interpret(stack) {
     }
   }
 
+  // Type Constructors
+  else if (top.init == '<>') {
+    for (let type of top.polytype) {
+      let template = search(type)
+      if (template.polytype) {
+        top.polytype = top.polytype.concat(template.polytype)
+      }
+      for (let key in template.value) {
+        top.value[key] = JSON.parse(JSON.origStringify(template.value[key]))
+      }
+    }
+
+    delete top.init
+    stack.pop()
+  }
+
   // Passed Gates
   else if (top.operation == '\\' || top.operation == '?') {
     top.type = top.right.type
+    top.polytype = top.right.polytype
     top.value = top.right.value
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
+    stack.pop()
+  }
+
+  // Passed Logic
+  else if (top.operation == '&&' || top.operation == '||') {
+    top.type  = '<Boolean>'
+    top.value = !!top.right.value
     delete top.operation
     delete top.line
     delete top.left
@@ -1897,6 +2062,7 @@ function interpret(stack) {
     else if (top.left.native != null) {
       let ret = top.left.native(...top.args)
       top.type = ret.type
+      top.polytype = ret.polytype
       top.value = ret.value
       delete top.args
       delete top.operation
@@ -2036,10 +2202,13 @@ function interpret(stack) {
 
   // Union
   else if (top.operation == ':') {
-    top.type = '<Object>'
-    top.value = {}
     let left = top.left.value
     let right = top.right.value
+    top.type = '<Object>'
+    top.polytype = 
+      top.left.polytype && top.right.polytype ? top.left.polytype.concat(top.right.polytype) :
+      top.left.polytype || top.right.polytype
+    top.value = {}
     for(let key in left) {
       top.value[key] = left[key]
     }
@@ -2148,28 +2317,6 @@ function interpret(stack) {
     stack.pop()
   }
 
-  // And
-  else if (top.operation == '&&') {
-    top.type  = '<Boolean>'
-    top.value = top.left.value && top.right.value
-    delete top.operation
-    delete top.line
-    delete top.left
-    delete top.right
-    stack.pop()
-  }
-
-  // Or
-  else if (top.operation == '||') {
-    top.type  = '<Boolean>'
-    top.value = top.left.value || top.right.value
-    delete top.operation
-    delete top.line
-    delete top.left
-    delete top.right
-    stack.pop()
-  }
-
   // Stringer
   else if (top.operation == '~') {
     if (top.left.type == '<Array>' && top.right.type == '<Array>') {
@@ -2194,7 +2341,8 @@ function interpret(stack) {
 
   // Assign
   else if (top.operation == '=') {
-    top.left.type = top.right.type == '<Undefined>' ? top.left.type : top.right.type
+    top.left.type = top.right.type
+    top.left.polytype = top.right.polytype
     top.left.value = top.right.value
     delete top.operation
     delete top.line
@@ -2267,6 +2415,9 @@ function interpret(stack) {
   else if (top.operation == ':=') {
     let left = top.left.value
     let right = top.right.value
+    top.left.polytype = 
+      top.left.polytype && top.right.polytype ? top.left.polytype.concat(top.right.polytype) :
+      top.left.polytype || top.right.polytype
     for (let key in right) {
       left[key] = right[key]
     }
@@ -2299,6 +2450,7 @@ function interpret(stack) {
   else if (top.operation == '?=') {
     if (!!top.right.value) {
       top.left.type = top.right.type
+      top.left.polytype = top.right.polytype
       top.left.value = top.right.value
     }
     delete top.operation
@@ -2312,6 +2464,7 @@ function interpret(stack) {
   else if (top.operation == '\=') {
     if (!top.left.value) {
       top.left.type = top.right.type
+      top.left.polytype = top.right.polytype
       top.left.value = top.right.value
     }
     delete top.operation
