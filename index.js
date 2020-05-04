@@ -1,5 +1,5 @@
 var fs = require('fs')
-require("json-circular-stringify");
+require('json-circular-stringify')
 
 var src = fs.readFileSync('test.fae', 'utf8')
 
@@ -38,7 +38,7 @@ while (cur < src.length) {
   
   // Skip Line Comments
   else if (src[cur] == '/' && src[cur + 1] == '/') {
-    while(src[cur] != '\n') {
+    while(src[cur] != '\n' && src[cur]) {
       next()
     }
     ++line
@@ -49,7 +49,7 @@ while (cur < src.length) {
   // Skip Block Comments
   else if (src[cur] == '/' && src[cur + 1] == '*') {
     while(src[cur] != '/' || src[cur - 1] != '*') {
-      if (src[cur] == '\n') {
+      if (src[cur] == '\n' && src[cur]) {
         ++line
       }
       next()
@@ -1532,6 +1532,22 @@ std['<Number>'] = {
   }
 }
 
+std['<Boolean>'] = {
+  String: {
+    native(bool) {
+      return {
+        type: '<String>',
+        value: bool.value.toString()
+      }
+    }
+  },
+  Boolean: {
+    native(bool) {
+      return bool
+    }
+  }
+}
+
 std['<String>'] = {
   Boolean: {
     native(string) {
@@ -1561,7 +1577,7 @@ std['<Array>'] = {
     native(array, item) {
       return {
         type: '<Boolean>',
-        value: !!array.value.find(i => i.value === item.value)
+        value: !!array.value.find(i => Object.is(i.value,item.value))
       }
     }
   }
@@ -1633,33 +1649,6 @@ function create_stack(env) {
   let stack = []
   
   stack.push_environment = (pushed_env, args = {}) => {
-    // let statements = []
-    // for (let statement of env.statements) {
-    //   let new_statement = {}
-    //   for (let key of Object.keys(statement)) {
-    //     if (key == 'body' || key == 'else') {
-    //       new_statement[key] = statement[key]
-    //     }
-    //     else {
-    //       new_statement[key] = JSON.parse(JSON.origStringify(statement[key]))
-    //     }
-    //   }
-    //   statements.push(new_statement)
-    // }
-    // let new_env = {
-    //   scope : env.scope,
-    //   statements,
-    //   running : env.running
-    // }
-    // new_env.scope.vars = {}
-    // for (let key in env.scope.vars) {
-    //   if (env.scope.vars[key].hasOwnProperty('value')) {
-    //     new_env.scope.vars[key] = JSON.parse(JSON.origStringify(env.scope.vars[key]))
-    //   }
-    //   else {
-    //     new_env.scope.vars[key] = env.scope.vars[key]
-    //   }
-    // }
     let new_env = JSON.parse(JSON.origStringify(pushed_env))
     for (let key in args) {
       new_env.vars[key] = args[key]
@@ -2021,6 +2010,9 @@ function interpret(stack) {
       if (item.variable) {
         top.value[top.at] = search(item.variable)
       }
+      if(item.type == '<Pointer>') {
+        top.value[top.at] = item.value
+      }
       if (item.operation || item.init) {
         stack.push(item)
       }
@@ -2042,6 +2034,9 @@ function interpret(stack) {
       if (item.variable) {
         top.value[top.remaining[0]] = search(item.variable)
       }
+      if(item.type == '<Pointer>') {
+        top.value[top.remaining[0]] = item.value
+      }
       if (item.operation || item.init) {
         stack.push(item)
       }
@@ -2062,7 +2057,11 @@ function interpret(stack) {
         top.polytype = top.polytype.concat(template.polytype)
       }
       for (let key in template.value) {
-        top.value[key] = JSON.parse(JSON.origStringify(template.value[key]))
+        top.value[key] = {
+          type: template.value[key].type,
+          polytype: template.value[key].polytype,
+          value: template.value[key].value,
+        }
       }
     }
 
@@ -2207,6 +2206,9 @@ function interpret(stack) {
       top.at = 0
     }
     else {
+      if (top.at < top.args.length && top.args[top.at].type == '<Pointer>') {
+        top.args[top.at] = top.args[top.at].value
+      }
       top.at++
     }
     if (top.at < top.args.length) {
@@ -2740,6 +2742,7 @@ if (!machine.threads.length) {
 }
 rl.on('line', (input) => {
   machine.advance()
+  // console.log(JSON.stringify(machine.threads, null, 2))
   if (!machine.threads.length) {
     rl.close()
   }
