@@ -881,7 +881,16 @@ function ParseEnvironment({tokens,args}) {
       }
       tokens.shift()
 
-      statement.condition = ParseExpression({tokens})
+      statement.condition = {
+        line: tokens[0].line,
+        left: ParseExpression({tokens}),
+        operation: '<>',
+        single: true,
+        right: {
+          type: '<Boolean>',
+          value: false
+        }
+      }
       if (tokens[0].symbol != ')') {
         throw ParserError(tokens[arg_start], `Expected ')' at the end of ${type} condition`)
       }
@@ -911,7 +920,16 @@ function ParseEnvironment({tokens,args}) {
         }
         tokens.shift()
   
-        statement.condition = ParseExpression({tokens})
+        statement.condition = {
+          line: tokens[0].line,
+          left: ParseExpression({tokens}),
+          operation: '<>',
+          single: true,
+          right: {
+            type: '<Boolean>',
+            value: false
+          }
+        }
         if (tokens[0].symbol != ')') {
           throw ParserError(tokens[arg_start], `Expected ')' at the end of if condition`)
         }
@@ -946,7 +964,15 @@ function ParseEnvironment({tokens,args}) {
       }
       tokens.shift()
   
-      statement.in = ParseExpression({tokens})
+      statement.in = {
+        line: tokens[0].symbol,
+        left: ParseExpression({tokens}),
+        operation: '<>',
+        right: {
+          type: '<Array>',
+          value: []
+        }
+      }
 
       if (tokens[0].symbol != ')') {
         throw ParserError(tokens[arg_start], `Expected ')' at the end of for loop arguments`)
@@ -1032,20 +1058,30 @@ function ParseTerm({tokens}) {
   // Identifiers
   else if (tokens[0].type == 'IDENTIFIER') {
     let term = {
-      variable : tokens[0].symbol
+      line: tokens[0].line,
+      operation : 'variable',
+      id: tokens[0].symbol
     }
     tokens.shift()
     return term
   }
   // Arrays
   else if (tokens[0].symbol == '[') {
-    let array = []
+    let array = {
+      type: '<Array>',
+      value: []
+    }
     while (tokens[0].symbol != ']') {
       tokens.shift()
       if (tokens[0].symbol == ']') {
         break
       }
-      array.push(ParseExpression({tokens}))
+      array = {
+        line: tokens[0].line,
+        left: array,
+        operation: '~',
+        right: ParseExpression({tokens})
+      }
       if (tokens[0].symbol == ';') {
         throw ParserError(tokens[0], `No matching ']' found in array initializer`)
       }
@@ -1054,16 +1090,14 @@ function ParseTerm({tokens}) {
       }
     }
     tokens.shift()
-    let term = {
-      init : '[]',
-      type : '<Array>',
-      value : array
-    }
-    return term
+    return array
   }
   // Objects
   else if (tokens[0].symbol == '{') {
-    let obj = {}
+    let obj = {
+      type: '<Object>',
+      value: {}
+    }
     while (tokens[0].symbol != '}') {
       tokens.shift()
       if (tokens[0].symbol == '}') {
@@ -1076,25 +1110,33 @@ function ParseTerm({tokens}) {
       tokens.shift()
       if (tokens[0].symbol != ':') {
         throw ParserError(tokens[0], `Expected ':'`)
-      }
+      } 
       tokens.shift()
-      obj[key] = ParseExpression({tokens})
+      let right = {}
+      right[key] = ParseExpression({tokens})
+      obj = {
+        line: tokens[0].line,
+        left: obj,
+        operation: ':',
+        right: {
+          type: '<Object>',
+          value: right
+        }
+      }
       if (tokens[0].symbol != '}' && tokens[0].symbol != ',' ) {
         throw ParserError(tokens[0], `Invalid expression in object initializer. Are you missing a ','?`)
       }
     }
     tokens.shift()
-    let term = {
-      init : '{}',
-      type : '<Object>',
-      value : obj
-    }
-    return term
+    return obj
   }
   // Type Constructors
   else if (tokens[0].symbol == '<') {
-    let polytype = []
-    let term
+    let term = {
+      type: '<Object>',
+      polytype: [],
+      value: {}
+    }
     while (tokens[0].symbol != '>') {
       tokens.shift()
       if (tokens[0].type != 'IDENTIFIER') {
@@ -1118,21 +1160,21 @@ function ParseTerm({tokens}) {
         }
         break
       }
-      polytype.push(tokens[0].symbol)
+      term = {
+        left: term,
+        operation: ':',
+        right: {
+          line: tokens[0].line,
+          operation: 'variable',
+          id: tokens[0].symbol
+        }
+      }
       tokens.shift()
       if (tokens[0].symbol != '>' && tokens[0].symbol != ',' ) {
         throw ParserError(tokens[0], `Expected '>' or ',' in type constructor.`)
       }
     }
     tokens.shift()
-    if (polytype.length) {
-      term = {
-        init: '<>',
-        type: '<Object>',
-        polytype,
-        value: {}
-      }
-    }
     return term
   }
   // Nested Expressions
@@ -1199,10 +1241,19 @@ function ParseSuffix({tokens}) {
     else if (operation == '(') {
       operation = '()'
       tokens.shift()
-      let args = []
+
+      let args = {
+        type: '<Array>',
+        value : []
+      }
 
       while (tokens[0].symbol != ')') {
-        args.push(ParseExpression({tokens}))
+        args = {
+          line: tokens[0].line,
+          left: args,
+          operation: '~',
+          right: ParseExpression({tokens})
+        }
         if (tokens[0].symbol == ',') {
           tokens.shift()
         }
@@ -1219,7 +1270,7 @@ function ParseSuffix({tokens}) {
         line,
         left,
         operation,
-        args
+        right: args
       }
       left = op
     }
@@ -1705,19 +1756,31 @@ function TypeError(line, message) {
   return `TypeError at Line ${line} - ${message}`
 }
     
-function same_type(left, right) {
+function same_type(left, right, lrefs = [], rrefs = []) {
   if (left.type != right.type) {
     return false
   }
   if (left.type == '<Object>') {
+    if (Object.is(left.value, right.value)) {
+      return true
+    }
     if (Object.keys(right.value).length === 0) {
       return true
     }
+    lrefs.push(left)
+    rrefs.push(right)
     for (let key in right.value) {
       if (!left.value[key]) {
         return false
       }
-      if (!same_type(left.value[key],right.value[key])) {
+      let lindex = lrefs.indexOf(left.value[key])
+      let rindex = rrefs.indexOf(right.value[key])
+      if(lindex == -1 && rindex == -1) {
+        if (!same_type(left.value[key],right.value[key],lrefs,rrefs)) {
+          return false
+        }
+      }
+      else if (lindex != rindex) {
         return false
       }
     }
@@ -1795,10 +1858,7 @@ function interpret(stack) {
 
   // N Loop
   else if (top.statement == 'NLOOP') {
-    if (top.times.variable) {
-      top.times = search(top.times.variable)
-    }
-    if (!top.times.hasOwnProperty('value') || top.times.init) {
+    if (!top.times.operation) {
       stack.push(top.times)
     }
     else if (top.remaining == null) {
@@ -1817,54 +1877,27 @@ function interpret(stack) {
   else if (top.statement == 'WHILE') {
     if (top.eval == null) {
       top.eval = JSON.parse(JSON.origStringify(top.condition))
+      stack.push(top.eval)
     }
-    if (top.eval.variable) {
-      top.eval = search(top.eval.variable)
-    }
-    if (top.eval.hasOwnProperty('value') && !top.eval.init) {
-      if (top.eval.value) {
-        stack.push_environment(top.body)
-        delete top.eval
-      }
-      else {
-        stack.pop()
-      }
+    else if (top.eval.value) {
+      stack.push_environment(top.body)
+      delete top.eval
     }
     else {
-      stack.push(top.eval)
+      stack.pop()
     }
   }
 
   // For
   else if (top.statement == 'FOR') {
-    if (top.eval == null) {
-      top.eval = JSON.parse(JSON.origStringify(top.in))
-    }
-    if (top.eval.variable) {
-      top.eval = search(top.eval.variable)
-    }
-    if (!top.eval.hasOwnProperty('value') || top.eval.init) {
-      stack.push(top.eval)
-    }
-    else if (top.at == null) {
+    if (top.at == null) {
+      stack.push(top.in)
       top.at = 0
     }
-    else if (top.at < top.eval.value.length) {
+    else if (top.at < top.in.value.length) {
       let args = {}
-      if (top.eval.type == '<Array>') {
-        args[top.variable] = {
-          type: top.eval.value[top.at].type,
-          value: top.eval.value[top.at].value
-        }
-      }
-      else if (top.eval.type == '<String>') {
-        args[top.variable] = {
-          type: '<String>',
-          value: top.eval.value[top.at]
-        }
-      }
+      args[top.variable] = top.in.value[top.at]
       stack.push_environment(top.body,args)
-      delete top.eval
       ++top.at
     }
     else {
@@ -1874,10 +1907,7 @@ function interpret(stack) {
 
   // If Elif
   else if (top.statement == 'IF' || top.statement == 'ELIF') {
-    if (top.condition.variable) {
-      top.condition = search(top.condition.variable)
-    }
-    if (!top.condition.hasOwnProperty('value') || top.condition.init) {
+    if (top.condition.operation) {
       stack.push(top.condition)
     }
     else {
@@ -1900,17 +1930,14 @@ function interpret(stack) {
   // Expressions
   else if (top.statement == 'EXPRESSION') {
     stack.pop()
-    if (top.expression.operation || top.expression.init) {
+    if (top.expression.operation) {
       stack.push(top.expression)
     }
   }
 
   // Return Statements
   else if (top.statement == 'RETURN') {
-    if (top.expression.variable) {
-      top.expression = search(top.expression.variable)
-    }
-    if (top.expression.operation || top.expression.init) {
+    if (top.expression.operation) {
       stack.push(top.expression)
     }
     else {
@@ -1928,13 +1955,10 @@ function interpret(stack) {
   }
 
   // Traverse Left
-  else if (top.left && (top.left.operation || top.left.init)) {
+  else if (top.left && top.left.operation) {
     stack.push(top.left)
   }
-  // Leftside Variables
-  else if (top.left && top.left.variable) {
-    top.left = search(top.left.variable)
-  }
+
   // Leftside Pointers
   else if (top.left && top.left.type == '<Pointer>') {
     top.left = top.left.value
@@ -1985,88 +2009,12 @@ function interpret(stack) {
   }
 
   // Traverse Right
-  else if (top.right && (top.right.operation || top.right.init)) {
+  else if (top.right && top.right.operation) {
     stack.push(top.right)
-  }
-  // Rightside Variables
-  else if (top.right && top.right.variable) {
-    top.right = search(top.right.variable)
   }
   // Rightside Pointers
   else if (top.right && top.right.type == '<Pointer>') {
     top.right = top.right.value
-  }
-
-  // Traverse Arrays
-  else if (top.init == '[]') {
-    if (top.at == null) {
-      top.at = 0
-    }
-    else {
-      top.at++
-    }
-    if (top.at < top.value.length) {
-      let item = top.value[top.at]
-      if (item.variable) {
-        top.value[top.at] = search(item.variable)
-      }
-      if(item.type == '<Pointer>') {
-        top.value[top.at] = item.value
-      }
-      if (item.operation || item.init) {
-        stack.push(item)
-      }
-    }
-    else {
-      delete top.init
-      delete top.at
-      stack.pop()
-    }
-  }
-
-  // Traverse Objects
-  else if (top.init == '{}') {
-    if (top.remaining == null) {
-      top.remaining = Object.keys(top.value)
-    }
-    if (top.remaining.length) {
-      let item = top.value[top.remaining[0]]
-      if (item.variable) {
-        top.value[top.remaining[0]] = search(item.variable)
-      }
-      if(item.type == '<Pointer>') {
-        top.value[top.remaining[0]] = item.value
-      }
-      if (item.operation || item.init) {
-        stack.push(item)
-      }
-      top.remaining.shift()
-    }
-    else {
-      delete top.init
-      delete top.remaining
-      stack.pop()
-    }
-  }
-
-  // Type Constructors
-  else if (top.init == '<>') {
-    for (let type of top.polytype) {
-      let template = search(type)
-      if (template.polytype) {
-        top.polytype = top.polytype.concat(template.polytype)
-      }
-      for (let key in template.value) {
-        top.value[key] = {
-          type: template.value[key].type,
-          polytype: template.value[key].polytype,
-          value: template.value[key].value,
-        }
-      }
-    }
-
-    delete top.init
-    stack.pop()
   }
 
   // Passed Gates
@@ -2103,6 +2051,17 @@ function interpret(stack) {
 
   //
   // Operations
+
+  // Variable
+  else if (top.operation == 'variable') {
+    top.tyoe = '<Pointer>'
+    top.value = search(top.id)
+    if (!top.value.polytype) {
+      top.value.polytype = [top.id]
+    }
+    delete top
+    stack.pop()
+  }
 
   // Dot Access
   else if (top.operation == '.') {
@@ -2151,6 +2110,11 @@ function interpret(stack) {
         let index = Math.round(right.value)
         top.type  = '<Pointer>'
         top.value = left.value[index]
+        delete top.operation
+        delete top.line
+        delete top.left
+        delete top.right
+        stack.pop()
       }
       // Slice Indexing
       else if (right.type == '<Array>') {
@@ -2163,6 +2127,23 @@ function interpret(stack) {
         }
         top.type = '<Array>'
         top.value = slice
+        delete top.operation
+        delete top.line
+        delete top.left
+        delete top.right
+        stack.pop()
+      }
+      else {
+        top.right = {
+          line: top.line,
+          left: top.right,
+          operation: '<>',
+          single: true,
+          right: {
+            type: '<Number>',
+            value: 0
+          }
+        }
       }
     }
     // Strings
@@ -2172,6 +2153,11 @@ function interpret(stack) {
         let index = Math.round(right.value)
         top.type  = '<String>'
         top.value = left.value[index]
+        delete top.operation
+        delete top.line
+        delete top.left
+        delete top.right
+        stack.pop()
       }
       // Slice Indexing
       else if (right.type == '<Array>') {
@@ -2184,56 +2170,60 @@ function interpret(stack) {
         }
         top.type = '<String>'
         top.value = slice
+        delete top.operation
+        delete top.line
+        delete top.left
+        delete top.right
+        stack.pop()
+      }
+      else {
+        top.right = {
+          line: top.line,
+          left: top.right,
+          operation: '<>',
+          single: true,
+          right: {
+            type: '<Number>',
+            value: 0
+          }
+        }
       }
     }
     else if (left.type == '<Object>') {
       // String Access
       if (right.type == '<String>') {
-        top.type  = '<Pointer>'
-        top.value = left.value[right.value]
+        top.operation = '.'
+      }
+      else {
+        top.right = {
+          line: top.line,
+          left: top.right,
+          operation: '<>',
+          single: true,
+          right: {
+            type: '<String>',
+            value: ''
+          }
+        }
       }
     }
-    delete top.operation
-    delete top.line
-    delete top.left
-    delete top.right
-    stack.pop()
   }
 
   // Function Call
   else if (top.operation == '()') {
-    if (top.at == null) {
-      top.at = 0
-    }
-    else {
-      if (top.at < top.args.length && top.args[top.at].type == '<Pointer>') {
-        top.args[top.at] = top.args[top.at].value
-      }
-      top.at++
-    }
-    if (top.at < top.args.length) {
-      let item = top.args[top.at]
-      if (item.variable) {
-        top.args[top.at] = search(item.variable)
-      }
-      if (item.operation || item.init) {
-        stack.push(item)
-      }
-    }
-    else if (top.left.native != null) {
+    if (top.left.native != null) {
       if (top.left.caller) {
-        top.args.unshift(top.left.caller)
+        top.right.value.unshift(top.left.caller)
         delete top.left.caller
       }
-      let ret = top.left.native(...top.args)
+      let ret = top.left.native(...top.right.value)
       top.type = ret.type
       top.polytype = ret.polytype
       top.value = ret.value
-      delete top.args
-      delete top.operation
       delete top.line
       delete top.left
-      delete top.at
+      delete top.operation
+      delete top.right
       stack.pop()
     }
     else if (top.fn == null) {
@@ -2243,7 +2233,7 @@ function interpret(stack) {
         delete top.left.caller
       }
       for (let i =  0; i < top.args.length && i < top.left.args.length; i++) {
-        args[top.left.args[i]] = top.args[i]
+        args[top.left.args[i]] = top.right.value[i]
       }
       if (top.left.type == 'TASK') {
         machine.create_thread(top.left.body, args)
@@ -2253,7 +2243,6 @@ function interpret(stack) {
         delete top.operation
         delete top.line
         delete top.left
-        delete top.at
         stack.pop()
       }
       else {
@@ -2263,11 +2252,10 @@ function interpret(stack) {
     else {
       top.type = top.fn.type
       top.value = top.fn.value
-      delete top.args
-      delete top.operation
       delete top.line
       delete top.left
-      delete top.at
+      delete top.operation
+      delete top.right
       delete top.fn
       stack.pop()
     }
@@ -2276,7 +2264,11 @@ function interpret(stack) {
   // Type Cast
   else if (top.operation == '<>') {
 
-    if (same_type(top.left, top.right)) {
+    if (top.left.type == '<Array>') {
+      top.type = '<Array>'
+      top.value = top.left.value.filter(value => same_type(value, top.right))
+    }
+    else if (same_type(top.left, top.right)) {
       top.type = top.right.type
       top.polytype = 
         top.left.polytype && top.right.polytype ? top.left.polytype.concat(top.right.polytype) :
@@ -2543,25 +2535,62 @@ function interpret(stack) {
     if (top.left.type == '<Array>' && top.right.type == '<Array>') {
       top.type  = '<Array>'
       top.value = top.left.value.concat(top.right.value)
+      delete top.operation
+      delete top.line
+      delete top.left
+      delete top.right
+      stack.pop()
     }
     else if (top.left.type == '<Array>') {
       top.type  = '<Array>'
       top.value = top.left.value
       top.value.push(top.right)
+      delete top.operation
+      delete top.line
+      delete top.left
+      delete top.right
+      stack.pop()
+    }
+    else if (top.right.type != '<String>'){
+      top.right = {
+        line: top.line,
+        left: top.right,
+        operation: '<>',
+        single: true,
+        right: {
+          type: '<String>',
+          value: ''
+        }
+      }
+    }
+    else if (top.left.type != '<String>') {
+      top.left = {
+        line: top.line,
+        left: top.left,
+        operation: '<>',
+        single: true,
+        right: {
+          type: '<String>',
+          value: ''
+        }
+      }
     }
     else {
       top.type  = '<String>'
-      top.value = '' + top.left.value + top.right.value
+      top.value = top.left.value + top.right.value
+      delete top.operation
+      delete top.line
+      delete top.left
+      delete top.right
+      stack.pop()
     }
-    delete top.operation
-    delete top.line
-    delete top.left
-    delete top.right
-    stack.pop()
   }
 
   // Assign
   else if (top.operation == '=') {
+    if (top.left.type != '<Undefined>' && !same_type(top.left, top.right)) {
+      throw TypeError(top.line, "Type mismatch during assignment.")
+    }
     if (top.left.set) {
       top.left.set.obj[top.left.set.key] = top.right
     }

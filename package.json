@@ -17,7 +17,6 @@
   },
   "homepage": "https://github.com/suddenly-eva/fae#readme",
   "dependencies": {
-    "flatted": "^2.0.2",
     "json-circular-stringify": "0.0.1"
   }
 }
