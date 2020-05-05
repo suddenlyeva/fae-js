@@ -1858,7 +1858,7 @@ function interpret(stack) {
 
   // N Loop
   else if (top.statement == 'NLOOP') {
-    if (!top.times.operation) {
+    if (top.times.operation) {
       stack.push(top.times)
     }
     else if (top.remaining == null) {
