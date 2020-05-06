@@ -1750,6 +1750,7 @@ machine.advance = () => {
 //   else {
 //     machine.at = machine.threads.length - 1
 //   }
+//   console.log(JSON.stringify(machine.threads, null, 2))
 // }
 
 function TypeError(line, message) {
@@ -2054,12 +2055,13 @@ function interpret(stack) {
 
   // Variable
   else if (top.operation == 'variable') {
-    top.tyoe = '<Pointer>'
+    top.type = '<Pointer>'
     top.value = search(top.id)
     if (!top.value.polytype) {
       top.value.polytype = [top.id]
     }
-    delete top
+    delete top.operation
+    delete top.id
     stack.pop()
   }
 
@@ -2232,7 +2234,7 @@ function interpret(stack) {
         args.this = top.left.caller
         delete top.left.caller
       }
-      for (let i =  0; i < top.args.length && i < top.left.args.length; i++) {
+      for (let i =  0; i < top.right.value.length && i < top.left.args.length; i++) {
         args[top.left.args[i]] = top.right.value[i]
       }
       if (top.left.type == 'TASK') {
@@ -2264,9 +2266,15 @@ function interpret(stack) {
   // Type Cast
   else if (top.operation == '<>') {
 
-    if (top.left.type == '<Array>') {
+    if (top.left.type == '<Array>' && top.right.type != '<Array>') {
       top.type = '<Array>'
       top.value = top.left.value.filter(value => same_type(value, top.right))
+      delete top.line
+      delete top.left
+      delete top.operation
+      delete top.right
+      delete top.single
+      stack.pop()
     }
     else if (same_type(top.left, top.right)) {
       top.type = top.right.type
@@ -2275,9 +2283,11 @@ function interpret(stack) {
         top.left.polytype || top.right.polytype
       top.value = top.left.value
       delete top.line
+      delete top.left
       delete top.operation
       delete top.single
       delete top.right
+      stack.pop()
     }
     else if (top.single) {
 
@@ -2287,12 +2297,14 @@ function interpret(stack) {
       if (conversion) {
         conversion.caller = top.left
         top.operation = '()'
-        top.args = []
+        top.right = {
+          type: '<Array>',
+          value: []
+        }
         top.left = {
           type: '<Pointer>',
           value: conversion
         }
-        delete top.right
         delete top.single
       }
       else {
@@ -2771,7 +2783,6 @@ if (!machine.threads.length) {
 }
 rl.on('line', (input) => {
   machine.advance()
-  // console.log(JSON.stringify(machine.threads, null, 2))
   if (!machine.threads.length) {
     rl.close()
   }
