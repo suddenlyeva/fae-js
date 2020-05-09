@@ -711,7 +711,7 @@ function ParserError(token, message) {
 function ParseEnvironment({tokens,args}) {
 
   let environment = {}
-  let vars = args
+  let vars = args ? args : {}
 
   environment.vars = vars
   environment.statements = []
