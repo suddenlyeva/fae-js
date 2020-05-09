@@ -1668,6 +1668,25 @@ std['<Object>'] = {
   }
 }
 
+std['<Undefined>'] = {
+  Boolean: {
+    native(undef) {
+      return {
+        type: '<Boolean>',
+        value: false
+      }
+    }
+  },
+  type: {
+    native(undef) {
+      return {
+        type: '<String>',
+        value: undef.type
+      }
+    }
+  }
+}
+
 std['<*>'] = {
   type: {
     native(any) {
@@ -1966,47 +1985,136 @@ function interpret(stack) {
   }
 
   // Truth Gate
-  else if (top.operation == '?' && !top.left.value) {
-    top.type = '<Empty>'
-    delete top.operation
-    delete top.line
-    delete top.left
-    delete top.right
-    stack.pop()
+  else if (top.operation == '?') {
+    if (top.left.type != '<Boolean>' && top.left.type != '<Empty>') {
+      if (top.left.attempted) {
+        throw TypeError(top.line, `Typecast to <Boolean> returned a non <Boolean> value.`)
+      }
+      top.left = {
+        attempted: true,
+        line: top.line,
+        left: top.left,
+        operation: '<>',
+        single: true,
+        right: {
+          type: '<Boolean>',
+          value: false
+        }
+      }
+    }
+    else if (!top.left.value) {
+      top.type = '<Empty>'
+      delete top.operation
+      delete top.line
+      delete top.left
+      delete top.right
+      stack.pop()
+    }
+    else {
+      top.operation = '?\\'
+    }
   }
 
   // Catch Gate
-  else if (top.operation == '\\' && !!top.left.value) {
-    top.type = top.left.type
-    top.polytype = top.left.polytype
-    top.value = top.left.value
-    delete top.operation
-    delete top.line
-    delete top.left
-    delete top.right
-    stack.pop()
+  else if (top.operation == '\\') {
+    if (top.left.type != '<Boolean>' && top.left.type != '<Empty>') {
+      if (top.left.attempted) {
+        throw TypeError(top.line, `Typecast to <Boolean> returned a non <Boolean> value.`)
+      }
+      top.save = top.left
+      top.left = {
+        attempted: true,
+        line: top.line,
+        left: JSON.parse(JSON.stringify(top.save)),
+        operation: '<>',
+        single: true,
+        right: {
+          type: '<Boolean>',
+          value: false
+        }
+      }
+    }
+    else if (top.left.value) {
+      if (top.save) {
+        top.left = top.save
+        delete top.save
+      }
+      top.type = top.left.type
+      top.polytype = top.left.polytype
+      top.value = top.left.value
+      delete top.operation
+      delete top.line
+      delete top.left
+      delete top.right
+      stack.pop()
+    }
+    else {
+      top.operation = '?\\'
+    }
   }
 
   // And Left
-  else if (top.operation == '&&' && !top.left.value) {
-    top.type  = '<Boolean>'
-    top.value = false
-    delete top.operation
-    delete top.line
-    delete top.left
-    delete top.right
-    stack.pop()
+  else if (top.operation == '&&') {
+    if (top.left.type != '<Boolean>') {
+      if (top.left.attempted) {
+        throw TypeError(top.line, `Typecast to <Boolean> returned a non <Boolean> value.`)
+      }
+      top.left = {
+        attempted: true,
+        line: top.line,
+        left: top.left,
+        operation: '<>',
+        single: true,
+        right: {
+          type: '<Boolean>',
+          value: false
+        }
+      }
+    }
+    else if (!top.left.value) {
+      top.type  = '<Boolean>'
+      top.value = false
+      delete top.operation
+      delete top.line
+      delete top.left
+      delete top.right
+      stack.pop()
+    }
+    else {
+      top.operation = '&&||'
+    }
   }
 
   // Or Left
   else if (top.operation == '||' && !!top.left.value) {
-    top.type  = '<Boolean>'
-    top.value = true
-    delete top.operation
-    delete top.line
-    delete top.left
-    delete top.right
-    stack.pop()
+    if (top.left.type != '<Boolean>') {
+      if (top.left.attempted) {
+        throw TypeError(top.line, `Typecast to <Boolean> returned a non <Boolean> value.`)
+      }
+      top.left = {
+        attempted: true,
+        line: top.line,
+        left: top.left,
+        operation: '<>',
+        single: true,
+        right: {
+          type: '<Boolean>',
+          value: false
+        }
+      }
+    }
+    else if (top.left.value) {
+      top.type  = '<Boolean>'
+      top.value = true
+      delete top.operation
+      delete top.line
+      delete top.left
+      delete top.right
+      stack.pop()
+    }
+    else {
+      top.operation = '&&||'
+    }
   }
 
   // Traverse Right
@@ -2019,7 +2127,7 @@ function interpret(stack) {
   }
 
   // Passed Gates
-  else if (top.operation == '\\' || top.operation == '?') {
+  else if (top.operation == '?\\') {
     top.type = top.right.type
     top.polytype = top.right.polytype
     top.value = top.right.value
@@ -2031,14 +2139,32 @@ function interpret(stack) {
   }
 
   // Passed Logic
-  else if (top.operation == '&&' || top.operation == '||') {
-    top.type  = '<Boolean>'
-    top.value = !!top.right.value
-    delete top.operation
-    delete top.line
-    delete top.left
-    delete top.right
-    stack.pop()
+  else if (top.operation == '&&||') {
+    if (top.right.type != '<Boolean>') {
+      if (top.right.attempted) {
+        throw TypeError(top.line, `Typecast to <Boolean> returned a non <Boolean> value.`)
+      }
+      top.right = {
+        attempted: true,
+        line: top.line,
+        left: top.right,
+        operation: '<>',
+        single: true,
+        right: {
+          type: '<Boolean>',
+          value: false
+        }
+      }
+    }
+    else {
+      top.type  = '<Boolean>'
+      top.value = top.right.value
+      delete top.operation
+      delete top.line
+      delete top.left
+      delete top.right
+      stack.pop()
+    }
   }
 
   // Skip Empty Assignments
@@ -2136,7 +2262,11 @@ function interpret(stack) {
         stack.pop()
       }
       else {
+        if (top.right.attempted) {
+          throw TypeError(top.line, `Typecast to <Number> returned a non <Number> value.`)
+        }
         top.right = {
+          attempted: true,
           line: top.line,
           left: top.right,
           operation: '<>',
