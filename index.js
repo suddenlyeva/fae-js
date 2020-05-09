@@ -1079,7 +1079,7 @@ function ParseTerm({tokens}) {
       array = {
         line: tokens[0].line,
         left: array,
-        operation: '~',
+        operation: 'push',
         right: ParseExpression({tokens})
       }
       if (tokens[0].symbol == ';') {
@@ -1251,7 +1251,7 @@ function ParseSuffix({tokens}) {
         args = {
           line: tokens[0].line,
           left: args,
-          operation: '~',
+          operation: 'push',
           right: ParseExpression({tokens})
         }
         if (tokens[0].symbol == ',') {
@@ -2266,7 +2266,7 @@ function interpret(stack) {
   // Type Cast
   else if (top.operation == '<>') {
 
-    if (top.left.type == '<Array>' && top.right.type != '<Array>') {
+    if (top.left.type == '<Array>' && top.right.type == '<Object>') {
       top.type = '<Array>'
       top.value = top.left.value.filter(value => same_type(value, top.right))
       delete top.line
@@ -2546,17 +2546,8 @@ function interpret(stack) {
   else if (top.operation == '~') {
     if (top.left.type == '<Array>' && top.right.type == '<Array>') {
       top.type  = '<Array>'
-      top.value = top.left.value.concat(top.right.value)
-      delete top.operation
-      delete top.line
-      delete top.left
-      delete top.right
-      stack.pop()
-    }
-    else if (top.left.type == '<Array>') {
-      top.type  = '<Array>'
       top.value = top.left.value
-      top.value.push(top.right)
+      top.value.push(...top.right.value)
       delete top.operation
       delete top.line
       delete top.left
@@ -2564,7 +2555,11 @@ function interpret(stack) {
       stack.pop()
     }
     else if (top.right.type != '<String>'){
+      if (top.right.attempted) {
+        throw TypeError(top.line, `Typecast to <String> returned a non <String> value.`)
+      }
       top.right = {
+        attempted: true,
         line: top.line,
         left: top.right,
         operation: '<>',
@@ -2576,7 +2571,11 @@ function interpret(stack) {
       }
     }
     else if (top.left.type != '<String>') {
+      if (top.left.attempted) {
+        throw TypeError(top.line, `Typecast to <String> returned a non <String> value.`)
+      }
       top.left = {
+        attempted: true,
         line: top.line,
         left: top.left,
         operation: '<>',
@@ -2596,6 +2595,18 @@ function interpret(stack) {
       delete top.right
       stack.pop()
     }
+  }
+
+  // Push
+  else if (top.operation == 'push') {
+    top.type  = '<Array>'
+    top.value = top.left.value
+    top.value.push(top.right)
+    delete top.operation
+    delete top.line
+    delete top.left
+    delete top.right
+    stack.pop()
   }
 
   // Assign
